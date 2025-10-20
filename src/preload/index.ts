@@ -14,17 +14,28 @@ const electronAPI = {
     getSession: () => ipcRenderer.invoke('auth:get-session'),
   },
 
-  // Session management (placeholder)
+  // Session management
   sessions: {
-    create: (data: Record<string, unknown>) => ipcRenderer.invoke('session:create', data),
-    delete: (id: string) => ipcRenderer.invoke('session:delete', id),
-    list: () => ipcRenderer.invoke('session:list'),
+    create: (config: { provider: 'claude' | 'openai' | 'gemini' | 'custom'; name: string; url?: string }) =>
+      ipcRenderer.invoke('session:create', config),
+    activate: (sessionId: string) => ipcRenderer.invoke('session:activate', sessionId),
+    delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
+    list: (includeInactive?: boolean) => ipcRenderer.invoke('session:list', includeInactive),
+    getActive: () => ipcRenderer.invoke('session:getActive'),
   },
 
-  // Data operations (placeholder)
+  // Data operations
   data: {
-    query: (filters: Record<string, unknown>) => ipcRenderer.invoke('data:query', filters),
-    export: (format: string) => ipcRenderer.invoke('data:export', format),
+    getCaptures: (filters?: Record<string, unknown>) => ipcRenderer.invoke('data:getCaptures', filters),
+    getCapture: (captureId: string) => ipcRenderer.invoke('data:getCapture', captureId),
+    searchCaptures: (query: string, filters?: Record<string, unknown>) =>
+      ipcRenderer.invoke('data:searchCaptures', query, filters),
+    updateTags: (captureId: string, tags: string[]) => ipcRenderer.invoke('data:updateTags', captureId, tags),
+    updateNotes: (captureId: string, notes: string) => ipcRenderer.invoke('data:updateNotes', captureId, notes),
+    setArchived: (captureId: string, isArchived: boolean) =>
+      ipcRenderer.invoke('data:setArchived', captureId, isArchived),
+    deleteCapture: (captureId: string) => ipcRenderer.invoke('data:deleteCapture', captureId),
+    getStats: () => ipcRenderer.invoke('data:getStats'),
   },
 }
 

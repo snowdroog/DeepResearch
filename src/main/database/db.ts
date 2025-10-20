@@ -195,6 +195,17 @@ class DatabaseService {
   }
 
   /**
+   * Update session metadata
+   */
+  updateSessionMetadata(id: string, metadata: Record<string, any>): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db
+      .prepare('UPDATE sessions SET metadata = ? WHERE id = ?')
+      .run(JSON.stringify(metadata), id);
+  }
+
+  /**
    * Delete session (and all associated captures via CASCADE)
    */
   deleteSession(id: string): void {
