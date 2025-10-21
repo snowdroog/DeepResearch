@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { Session, SessionState, ProviderType } from '../types/session'
 
 const PROVIDER_URLS: Record<ProviderType, string> = {
@@ -25,9 +24,7 @@ function mapProviderType(provider: ProviderType): 'claude' | 'openai' | 'gemini'
   return provider as 'claude' | 'openai' | 'gemini' | 'custom'
 }
 
-export const useSessionStore = create<SessionState>()(
-  persist(
-    (set) => ({
+export const useSessionStore = create<SessionState>()((set) => ({
       sessions: [],
       activeSessionId: null,
 
@@ -142,10 +139,5 @@ export const useSessionStore = create<SessionState>()(
           sessions: state.sessions.map((s) => (s.id === id ? { ...s, url } : s)),
         }))
       },
-    }),
-    {
-      name: 'deep-research-sessions',
-      version: 1,
-    }
+    })
   )
-)
