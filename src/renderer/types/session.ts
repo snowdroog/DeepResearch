@@ -15,9 +15,9 @@ export interface SessionState {
   activeSessionId: string | null
 
   // Actions
-  addSession: (provider: ProviderType, url?: string) => void
-  removeSession: (id: string) => void
-  setActiveSession: (id: string) => void
+  addSession: (provider: ProviderType, url?: string) => Promise<void>
+  removeSession: (id: string) => Promise<void>
+  setActiveSession: (id: string) => Promise<void>
   renameSession: (id: string, name: string) => void
   updateSessionUrl: (id: string, url: string) => void
 }

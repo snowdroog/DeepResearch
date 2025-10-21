@@ -31,6 +31,18 @@ declare global {
         getActive: () => Promise<any>
       }
 
+      // View management
+      views: {
+        updateBounds: (
+          sessionId: string,
+          bounds: { x: number; y: number; width: number; height: number }
+        ) => Promise<{ success: boolean; error?: string }>
+        setVisible: (
+          sessionId: string,
+          visible: boolean
+        ) => Promise<{ success: boolean; error?: string }>
+      }
+
       // Data operations
       data: {
         getCaptures: (

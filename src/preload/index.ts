@@ -24,6 +24,14 @@ const electronAPI = {
     getActive: () => ipcRenderer.invoke('session:getActive'),
   },
 
+  // View management
+  views: {
+    updateBounds: (sessionId: string, bounds: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('view:updateBounds', sessionId, bounds),
+    setVisible: (sessionId: string, visible: boolean) =>
+      ipcRenderer.invoke('view:setVisible', sessionId, visible),
+  },
+
   // Data operations
   data: {
     getCaptures: (filters?: Record<string, unknown>) => ipcRenderer.invoke('data:getCaptures', filters),

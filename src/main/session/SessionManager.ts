@@ -112,7 +112,8 @@ export class SessionManager {
   }
 
   /**
-   * Activate a session (attach its WebContentsView to the window)
+   * Activate a session (use visibility instead of remove/add)
+   * Note: Bounds are now controlled by the renderer via IPC
    */
   activateSession(sessionId: string): boolean {
     const view = this.views.get(sessionId);
@@ -122,43 +123,24 @@ export class SessionManager {
       return false;
     }
 
-    // Remove current view if any
+    // Hide current view if any
     if (this.activeSessionId) {
       const currentView = this.views.get(this.activeSessionId);
       if (currentView) {
-        this.mainWindow.contentView.removeChildView(currentView);
-        // Remove resize handler for previous view
-        const oldResizeHandler = this.resizeHandlers.get(this.activeSessionId);
-        if (oldResizeHandler) {
-          this.mainWindow.off('resize', oldResizeHandler);
-        }
+        currentView.setVisible(false);
+        console.log(`[SessionManager] Hidden session: ${this.activeSessionId}`);
       }
     }
 
-    // Attach new view
-    this.mainWindow.contentView.addChildView(view);
+    // Ensure view is added to window
+    const childViews = this.mainWindow.contentView.children;
+    if (!childViews.includes(view)) {
+      this.mainWindow.contentView.addChildView(view);
+      console.log(`[SessionManager] Added view to window for session: ${sessionId}`);
+    }
 
-    // Set bounds to fill the window (adjust as needed for UI layout)
-    const bounds = this.mainWindow.getBounds();
-    view.setBounds({
-      x: 0,
-      y: 60, // Leave space for toolbar
-      width: bounds.width,
-      height: bounds.height - 60
-    });
-
-    // Create and store resize handler for manual resize management
-    const resizeHandler = () => {
-      const bounds = this.mainWindow.getBounds();
-      view.setBounds({
-        x: 0,
-        y: 60,
-        width: bounds.width,
-        height: bounds.height - 60
-      });
-    };
-    this.mainWindow.on('resize', resizeHandler);
-    this.resizeHandlers.set(sessionId, resizeHandler);
+    // Show the view
+    view.setVisible(true);
 
     this.activeSessionId = sessionId;
 

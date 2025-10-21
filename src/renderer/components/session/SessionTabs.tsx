@@ -3,9 +3,9 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { Plus, X } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'
 import { ProviderType } from '../../types/session'
-import { Badge } from '../ui/badge'
 import { ProviderSelectionDialog } from './ProviderSelectionDialog'
 import { CloseSessionDialog } from './CloseSessionDialog'
+import { useWebContentsViewBounds } from '../../hooks/useWebContentsViewBounds'
 
 const PROVIDER_COLORS: Record<ProviderType, string> = {
   claude: 'bg-blue-500',
@@ -13,14 +13,6 @@ const PROVIDER_COLORS: Record<ProviderType, string> = {
   gemini: 'bg-purple-500',
   perplexity: 'bg-cyan-500',
   custom: 'bg-gray-500',
-}
-
-const PROVIDER_NAMES: Record<ProviderType, string> = {
-  claude: 'Claude',
-  chatgpt: 'ChatGPT',
-  gemini: 'Gemini',
-  perplexity: 'Perplexity',
-  custom: 'Custom',
 }
 
 interface SessionTabProps {
@@ -119,6 +111,39 @@ function SessionTab({
         <X className="h-3 w-3" />
       </button>
     </Tabs.Trigger>
+  )
+}
+
+interface SessionTabContentProps {
+  session: {
+    id: string
+    name: string
+    provider: ProviderType
+    url: string
+  }
+  isActive: boolean
+}
+
+function SessionTabContent({ session, isActive }: SessionTabContentProps) {
+  // Use the custom hook to manage WebContentsView bounds
+  const containerRef = useWebContentsViewBounds(isActive ? session.id : null, isActive)
+
+  return (
+    <Tabs.Content
+      key={session.id}
+      value={session.id}
+      className="flex-1 overflow-hidden"
+    >
+      {/* Container for WebContentsView */}
+      <div
+        ref={containerRef}
+        className="h-full w-full bg-background"
+        style={{ position: 'relative' }}
+      >
+        {/* WebContentsView will be positioned here by Electron */}
+        {/* The view is rendered natively by Electron, not in React */}
+      </div>
+    </Tabs.Content>
   )
 }
 
@@ -230,28 +255,16 @@ export function SessionTabs() {
       </Tabs.List>
 
       {/* Tab Content */}
-      {sessions.map((session) => (
-        <Tabs.Content
-          key={session.id}
-          value={session.id}
-          className="flex-1 overflow-auto"
-        >
-          {/* This is where BrowserView will be embedded */}
-          <div className="flex h-full items-center justify-center bg-muted/10">
-            <div className="text-center">
-              <div className={`mx-auto mb-4 h-16 w-16 rounded-full ${PROVIDER_COLORS[session.provider]}`}></div>
-              <h3 className="text-lg font-semibold">{session.name}</h3>
-              <Badge variant="secondary" className="mt-2">
-                {PROVIDER_NAMES[session.provider]}
-              </Badge>
-              <p className="mt-3 text-sm text-muted-foreground">{session.url}</p>
-              <p className="mt-4 text-xs text-muted-foreground">
-                BrowserView will be embedded here
-              </p>
-            </div>
-          </div>
-        </Tabs.Content>
-      ))}
+      {sessions.map((session) => {
+        const isActive = session.id === activeSessionId
+        return (
+          <SessionTabContent
+            key={session.id}
+            session={session}
+            isActive={isActive}
+          />
+        )
+      })}
       </Tabs.Root>
 
       {/* Provider Selection Dialog */}

@@ -185,6 +185,60 @@ function registerIpcHandlers() {
     }
   })
 
+  // View: Update bounds
+  ipcMain.handle('view:updateBounds', async (_event, sessionId: string, bounds: { x: number; y: number; width: number; height: number }) => {
+    try {
+      if (!sessionManager) throw new Error('SessionManager not initialized')
+      console.log(`[IPC] view:updateBounds called for session ${sessionId}`, bounds)
+
+      const view = sessionManager.getView(sessionId)
+      if (!view) {
+        console.error(`[IPC] View not found for session ${sessionId}`)
+        return { success: false, error: 'View not found' }
+      }
+
+      view.setBounds(bounds)
+      console.log(`[IPC] View bounds updated for session ${sessionId}`)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] view:updateBounds error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // View: Set visible
+  ipcMain.handle('view:setVisible', async (_event, sessionId: string, visible: boolean) => {
+    try {
+      if (!sessionManager) throw new Error('SessionManager not initialized')
+      console.log(`[IPC] view:setVisible called for session ${sessionId}, visible: ${visible}`)
+
+      const view = sessionManager.getView(sessionId)
+      if (!view) {
+        console.error(`[IPC] View not found for session ${sessionId}`)
+        return { success: false, error: 'View not found' }
+      }
+
+      if (visible) {
+        // Add view to window if not already added
+        if (!mainWindow) throw new Error('Main window not available')
+        const childViews = mainWindow.contentView.children
+        if (!childViews.includes(view)) {
+          mainWindow.contentView.addChildView(view)
+          console.log(`[IPC] View added to window for session ${sessionId}`)
+        }
+        view.setVisible(true)
+      } else {
+        view.setVisible(false)
+      }
+
+      console.log(`[IPC] View visibility updated for session ${sessionId}`)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] view:setVisible error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // Data: Get captures
   ipcMain.handle('data:getCaptures', async (_event, filters = {}) => {
     try {

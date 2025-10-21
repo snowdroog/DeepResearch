@@ -18,8 +18,11 @@ const PROVIDER_NAMES: Record<ProviderType, string> = {
   custom: 'Custom',
 }
 
-function generateId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+// Map renderer provider types to Electron provider types
+function mapProviderType(provider: ProviderType): 'claude' | 'openai' | 'gemini' | 'custom' {
+  if (provider === 'chatgpt') return 'openai'
+  if (provider === 'perplexity') return 'custom'
+  return provider as 'claude' | 'openai' | 'gemini' | 'custom'
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -28,15 +31,29 @@ export const useSessionStore = create<SessionState>()(
       sessions: [],
       activeSessionId: null,
 
-      addSession: (provider: ProviderType, url?: string) => {
-        const newSession: Session = {
-          id: generateId(),
+      addSession: async (provider: ProviderType, url?: string) => {
+        // Create session via IPC
+        const result = await window.electronAPI.sessions.create({
+          provider: mapProviderType(provider),
           name: PROVIDER_NAMES[provider],
+          url: url || PROVIDER_URLS[provider],
+        })
+
+        if (!result.success) {
+          console.error('[SessionStore] Failed to create session:', result.error)
+          return
+        }
+
+        console.log('[SessionStore] Session created:', result.session)
+
+        const newSession: Session = {
+          id: result.session.id,
+          name: result.session.name,
           provider,
           url: url || PROVIDER_URLS[provider],
           isActive: false,
-          createdAt: new Date(),
-          lastActiveAt: new Date(),
+          createdAt: new Date(result.session.created_at),
+          lastActiveAt: new Date(result.session.last_active),
         }
 
         set((state) => {
@@ -46,9 +63,22 @@ export const useSessionStore = create<SessionState>()(
             activeSessionId: newSession.id,
           }
         })
+
+        // Activate the newly created session
+        await window.electronAPI.sessions.activate(newSession.id)
       },
 
-      removeSession: (id: string) => {
+      removeSession: async (id: string) => {
+        // Delete session via IPC
+        const result = await window.electronAPI.sessions.delete(id)
+
+        if (!result.success) {
+          console.error('[SessionStore] Failed to delete session:', result.error)
+          return
+        }
+
+        console.log('[SessionStore] Session deleted:', id)
+
         set((state) => {
           const sessions = state.sessions.filter((s) => s.id !== id)
           let activeSessionId = state.activeSessionId
@@ -56,19 +86,43 @@ export const useSessionStore = create<SessionState>()(
           // If we removed the active session, activate another one
           if (activeSessionId === id) {
             activeSessionId = sessions.length > 0 ? sessions[0].id : null
+            // Activate the new active session via IPC
+            if (activeSessionId) {
+              window.electronAPI.sessions.activate(activeSessionId)
+            }
           }
 
           return { sessions, activeSessionId }
         })
       },
 
-      setActiveSession: (id: string) => {
+      setActiveSession: async (id: string) => {
+        // Activate session via IPC
+        const result = await window.electronAPI.sessions.activate(id)
+
+        if (!result.success) {
+          console.error('[SessionStore] Failed to activate session:', result.error)
+          return
+        }
+
+        console.log('[SessionStore] Session activated:', id)
+
         set((state) => {
           const sessions = state.sessions.map((s) => ({
             ...s,
             isActive: s.id === id,
             lastActiveAt: s.id === id ? new Date() : s.lastActiveAt,
           }))
+
+          // Hide all other views
+          state.sessions.forEach((s) => {
+            if (s.id !== id) {
+              window.electronAPI.views.setVisible(s.id, false)
+            }
+          })
+
+          // Show the active view
+          window.electronAPI.views.setVisible(id, true)
 
           return {
             sessions,
