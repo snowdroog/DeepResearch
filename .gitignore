@@ -45,5 +45,11 @@ Thumbs.db
 # Test coverage
 coverage
 
+# E2E test artifacts
+e2e-results/
+playwright-report/
+test-results/
+.playwright-mcp/
+
 # Claude
 .claude
