@@ -21,33 +21,44 @@ export function useWebContentsViewBounds(sessionId: string | null, isActive: boo
     console.log(`[useWebContentsViewBounds] Setting up observer for session ${sessionId}`)
 
     const updateBounds = () => {
-      const rect = container.getBoundingClientRect()
+      // Use requestAnimationFrame for smooth updates
+      requestAnimationFrame(() => {
+        const rect = container.getBoundingClientRect()
 
-      // Calculate bounds relative to the window
-      const bounds = {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      }
+        // Skip if container has no dimensions (might be hidden)
+        if (rect.width === 0 || rect.height === 0) {
+          console.log(`[useWebContentsViewBounds] Skipping update - container has no dimensions`)
+          return
+        }
 
-      console.log(`[useWebContentsViewBounds] Updating bounds for session ${sessionId}`, bounds)
+        // Calculate bounds relative to the window
+        const bounds = {
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        }
 
-      // Update view bounds via IPC
-      window.electronAPI.views
-        .updateBounds(sessionId, bounds)
-        .then((result) => {
-          if (!result.success) {
-            console.error(`[useWebContentsViewBounds] Failed to update bounds:`, result.error)
-          }
-        })
-        .catch((error) => {
-          console.error(`[useWebContentsViewBounds] Error updating bounds:`, error)
-        })
+        console.log(`[useWebContentsViewBounds] Updating bounds for session ${sessionId}`, bounds)
+
+        // Update view bounds via IPC
+        window.electronAPI.views
+          .updateBounds(sessionId, bounds)
+          .then((result) => {
+            if (!result.success) {
+              console.error(`[useWebContentsViewBounds] Failed to update bounds:`, result.error)
+            }
+          })
+          .catch((error) => {
+            console.error(`[useWebContentsViewBounds] Error updating bounds:`, error)
+          })
+      })
     }
 
-    // Initial bounds update
-    updateBounds()
+    // Initial bounds update with a small delay to ensure DOM is ready
+    const initialTimeout = setTimeout(() => {
+      updateBounds()
+    }, 50)
 
     // Create ResizeObserver to track container size changes
     const resizeObserver = new ResizeObserver(() => {
@@ -56,14 +67,22 @@ export function useWebContentsViewBounds(sessionId: string | null, isActive: boo
 
     resizeObserver.observe(container)
 
-    // Also listen for window resize events
-    window.addEventListener('resize', updateBounds)
+    // Also listen for window resize events (for maximize/restore)
+    const handleWindowResize = () => {
+      // Small delay to let the DOM settle after maximize/restore
+      setTimeout(() => {
+        updateBounds()
+      }, 100)
+    }
+
+    window.addEventListener('resize', handleWindowResize)
 
     // Cleanup
     return () => {
       console.log(`[useWebContentsViewBounds] Cleaning up observer for session ${sessionId}`)
+      clearTimeout(initialTimeout)
       resizeObserver.disconnect()
-      window.removeEventListener('resize', updateBounds)
+      window.removeEventListener('resize', handleWindowResize)
     }
   }, [sessionId, isActive])
 
