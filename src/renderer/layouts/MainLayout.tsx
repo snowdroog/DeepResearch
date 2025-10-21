@@ -1,11 +1,29 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
+import { Settings, Download } from 'lucide-react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { SessionListPanel } from '../components/panels/SessionListPanel'
 import { ProviderTabsPanel } from '../components/panels/ProviderTabsPanel'
 import { DataPanel } from '../components/panels/DataPanel'
+import { SettingsDialog } from '../components/settings/SettingsDialog'
+import { ExportDialog } from '../components/export/ExportDialog'
+import { Button } from '../components/ui/button'
+import { useCapturesStore } from '../stores/capturesStore'
+import { useUIStore } from '../stores/uiStore'
 
 export function MainLayout() {
-  const [isDataPanelCollapsed, setIsDataPanelCollapsed] = useState(false)
+  const { captures, fetchCaptures } = useCapturesStore()
+  const { dialogs, setDialogOpen, panels, setPanelCollapsed } = useUIStore()
+
+  const isDataPanelCollapsed = panels.isDataPanelCollapsed
+  const showSettings = dialogs.settings
+  const showExport = dialogs.export
+
+  // Load captures when export dialog is opened
+  useEffect(() => {
+    if (showExport) {
+      fetchCaptures() // Get all captures including archived
+    }
+  }, [showExport, fetchCaptures])
 
   return (
     <div className="flex h-screen flex-col">
@@ -13,11 +31,40 @@ export function MainLayout() {
       <header className="flex h-14 items-center justify-between border-b px-6">
         <h1 className="text-lg font-semibold">DeepResearch - Prototype</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDialogOpen('export', true)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDialogOpen('settings', true)}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
           <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-100">
             Prototype Mode
           </span>
         </div>
       </header>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={showSettings}
+        onOpenChange={(open: boolean) => setDialogOpen('settings', open)}
+      />
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={showExport}
+        onOpenChange={(open: boolean) => setDialogOpen('export', open)}
+        data={captures}
+      />
 
       {/* Resizable Panel Layout */}
       <PanelGroup
@@ -47,13 +94,13 @@ export function MainLayout() {
           minSize={20}
           maxSize={50}
           collapsible={true}
-          onCollapse={() => setIsDataPanelCollapsed(true)}
-          onExpand={() => setIsDataPanelCollapsed(false)}
+          onCollapse={() => setPanelCollapsed('data', true)}
+          onExpand={() => setPanelCollapsed('data', false)}
           className="relative"
         >
           <DataPanel
             isCollapsed={isDataPanelCollapsed}
-            onToggleCollapse={() => setIsDataPanelCollapsed(!isDataPanelCollapsed)}
+            onToggleCollapse={() => setPanelCollapsed('data', !isDataPanelCollapsed)}
           />
         </Panel>
       </PanelGroup>

@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { LoginPage } from './features/auth/components/LoginPage'
 import { MainLayout } from './layouts/MainLayout'
 
@@ -21,6 +22,7 @@ function App() {
           }
         />
       </Routes>
+      <Toaster position="top-right" />
     </div>
   )
 }
