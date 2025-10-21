@@ -1,4 +1,5 @@
-import { autoUpdater } from 'electron-updater'
+import updaterPkg from 'electron-updater'
+const { autoUpdater } = updaterPkg
 import { BrowserWindow, dialog } from 'electron'
 import log from 'electron-log'
 
@@ -33,6 +34,18 @@ export class AutoUpdater {
   private mainWindow: BrowserWindow | null = null
   private checkInterval: NodeJS.Timeout | null = null
   private config: Required<UpdaterConfig>
+
+  /**
+   * Convert electron-updater release notes to string format
+   */
+  private formatReleaseNotes(releaseNotes: any): string | undefined {
+    if (!releaseNotes) return undefined;
+    if (typeof releaseNotes === 'string') return releaseNotes;
+    if (Array.isArray(releaseNotes)) {
+      return releaseNotes.map((note: any) => note.note || '').join('\n\n');
+    }
+    return undefined;
+  }
 
   constructor(config: UpdaterConfig = {}) {
     // Default configuration
@@ -167,7 +180,7 @@ export class AutoUpdater {
       this.notifyUpdateAvailable({
         version: info.version,
         releaseDate: info.releaseDate,
-        releaseNotes: info.releaseNotes,
+        releaseNotes: this.formatReleaseNotes(info.releaseNotes),
       })
     })
 
@@ -202,7 +215,7 @@ export class AutoUpdater {
       this.askToInstallUpdate({
         version: info.version,
         releaseDate: info.releaseDate,
-        releaseNotes: info.releaseNotes,
+        releaseNotes: this.formatReleaseNotes(info.releaseNotes),
       })
     })
 

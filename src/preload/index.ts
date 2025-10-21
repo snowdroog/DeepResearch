@@ -60,5 +60,16 @@ const electronAPI = {
 // Expose protected APIs to renderer
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
 
+// Expose raw electron API for testing
+// Note: This provides direct IPC access for E2E tests
+contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: {
+    invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+    send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+    on: (channel: string, func: (...args: any[]) => void) => ipcRenderer.on(channel, func),
+    removeListener: (channel: string, func: (...args: any[]) => void) => ipcRenderer.removeListener(channel, func),
+  },
+})
+
 // Type definitions for renderer
 export type ElectronAPI = typeof electronAPI

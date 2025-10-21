@@ -194,13 +194,11 @@ export function DataPanel({ isCollapsed, onToggleCollapse }: DataPanelProps) {
       </div>
 
       {/* Capture Detail Dialog */}
-      {selectedCaptureId && (
-        <CaptureDetailDialog
-          captureId={selectedCaptureId}
-          open={showDetailDialog}
-          onOpenChange={handleDialogClose}
-        />
-      )}
+      <CaptureDetailDialog
+        capture={selectedCaptureId ? captures.find(c => c.id === selectedCaptureId) || null : null}
+        open={showDetailDialog}
+        onOpenChange={handleDialogClose}
+      />
     </div>
   )
 }

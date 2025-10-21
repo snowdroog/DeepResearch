@@ -324,7 +324,7 @@ CREATE TABLE embeddings (
 - Keyboard shortcuts (Cmd+T, Cmd+W)
 
 **ProviderPanel**
-- Embedded WebContentsView
+- Embedded WebContentsView (modern Electron view API)
 - Full browser experience
 - Transparent interception (user unaware)
 
@@ -390,11 +390,11 @@ CREATE TABLE embeddings (
 - [ ] Create protected routes and auth guards
 
 ### Phase 1: Foundation (Weeks 2-3)
-- [ ] Set up Electron + React + TypeScript + Vite
-- [ ] Configure BaseWindow + WebContentsView
-- [ ] Implement session manager with partitions
-- [ ] Create secure IPC layer with type safety
-- [ ] Set up project structure (feature-based)
+- [x] Set up Electron + React + TypeScript + Vite
+- [x] Configure BaseWindow + WebContentsView
+- [x] Implement session manager with partitions (using WebContentsView)
+- [x] Create secure IPC layer with type safety
+- [x] Set up project structure (feature-based)
 
 ### Phase 2: Data Capture (Weeks 3-4)
 - [ ] Implement CDP Fetch domain integration

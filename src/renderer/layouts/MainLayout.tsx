@@ -15,7 +15,6 @@ export function MainLayout() {
   const { dialogs, setDialogOpen, panels, setPanelCollapsed } = useUIStore()
 
   const isDataPanelCollapsed = panels.isDataPanelCollapsed
-  const showSettings = dialogs.settings
   const showExport = dialogs.export
 
   // Load captures when export dialog is opened
@@ -54,10 +53,7 @@ export function MainLayout() {
       </header>
 
       {/* Settings Dialog */}
-      <SettingsDialog
-        open={showSettings}
-        onOpenChange={(open: boolean) => setDialogOpen('settings', open)}
-      />
+      <SettingsDialog />
 
       {/* Export Dialog */}
       <ExportDialog

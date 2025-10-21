@@ -489,7 +489,7 @@ We welcome contributions! Here's how you can help:
 ## Roadmap
 
 ### Version 0.2.0 (Next Release)
-- [ ] BrowserView integration for provider sessions
+- [x] WebContentsView integration for provider sessions (migrated from deprecated BrowserView)
 - [ ] Response interception with CDP
 - [ ] Improved export formats
 - [ ] Session templates

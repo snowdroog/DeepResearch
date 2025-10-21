@@ -7,10 +7,6 @@ import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export interface Session {
   id: string;
@@ -91,7 +87,10 @@ class DatabaseService {
   private loadSchema(): void {
     if (!this.db) throw new Error('Database not initialized');
 
-    const schemaPath = path.join(__dirname, 'schema.sql');
+    // Use a simple path relative to the process cwd for the compiled code
+    const schemaPath = path.join(process.cwd(), 'dist', 'main', 'database', 'schema.sql');
+
+    console.log('[DB] Loading schema from:', schemaPath);
     const schema = fs.readFileSync(schemaPath, 'utf-8');
 
     // Execute schema (handles CREATE TABLE IF NOT EXISTS)
