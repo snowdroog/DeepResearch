@@ -1,14 +1,16 @@
 # Session Manager Implementation
 
 ## Overview
-Implemented a comprehensive SessionManager system for managing multiple AI provider sessions using Electron BrowserView with isolated partitions.
+Implemented a comprehensive SessionManager system for managing multiple AI provider sessions using Electron **WebContentsView** with isolated partitions.
+
+**Note:** This implementation uses the modern **WebContentsView** API (Electron 28+), which replaced the deprecated BrowserView API. See `WEBCONTENTSVIEW_MIGRATION.md` for migration details.
 
 ## Components Created
 
 ### 1. SessionManager Class (`src/main/session/SessionManager.ts`)
 
 **Key Features:**
-- Creates isolated BrowserView instances with separate partitions per provider
+- Creates isolated WebContentsView instances with separate partitions per provider
 - Supports multiple concurrent AI provider sessions (Claude, OpenAI, Gemini, Custom)
 - Manages session lifecycle (create, activate, delete, list)
 - Persists session state across app restarts
@@ -92,7 +94,7 @@ Default URLs for each provider:
 ## Session Lifecycle
 
 ```
-Create → Store in DB → Create BrowserView → Load URL
+Create → Store in DB → Create WebContentsView → Load URL
          ↓
 Activate → Attach to Window → Update last_active
          ↓

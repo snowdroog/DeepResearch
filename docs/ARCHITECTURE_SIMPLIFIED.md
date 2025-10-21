@@ -62,7 +62,7 @@ DeepResearch is a **local Electron desktop app** that captures AI responses from
 │  │  - Search UI     │         │  - SQLite Database       │ │
 │  │  - Export Dialog │         │  - IPC Handlers          │ │
 │  │                  │         │                          │ │
-│  │  [Zustand Store] │         │  [BrowserView Manager]   │ │
+│  │  [Zustand Store] │         │  [WebContentsView Mgr]   │ │
 │  └──────────────────┘         └──────────────────────────┘ │
 │                                         │                   │
 │                                         ▼                   │
@@ -77,7 +77,7 @@ DeepResearch is a **local Electron desktop app** that captures AI responses from
 │                              └──────────────────┘           │
 │                                                             │
 │  ┌───────────────────────────────────────────────────────┐ │
-│  │         Embedded Browser Views (BrowserView)          │ │
+│  │      Embedded Content Views (WebContentsView)         │ │
 │  │                                                       │ │
 │  │  [Claude Web UI]  [ChatGPT]  [Gemini]  [Perplexity] │ │
 │  │                                                       │ │
