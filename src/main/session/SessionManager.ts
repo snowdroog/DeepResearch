@@ -1,14 +1,14 @@
 /**
- * SessionManager - Manages multiple AI provider sessions using BrowserView
+ * SessionManager - Manages multiple AI provider sessions using WebContentsView
  *
  * Features:
- * - Creates isolated BrowserView instances with separate partitions
+ * - Creates isolated WebContentsView instances with separate partitions
  * - Supports multiple concurrent provider sessions (Claude, OpenAI, Gemini)
  * - Manages session lifecycle (create, activate, delete)
  * - Integrates with database for persistence
  */
 
-import { BrowserView, BrowserWindow, session } from 'electron';
+import { WebContentsView, BrowserWindow, session } from 'electron';
 import { randomUUID } from 'crypto';
 import { db, Session } from '../database/db.js';
 import { ResponseInterceptor } from '../capture/ResponseInterceptor.js';
@@ -27,8 +27,9 @@ const PROVIDER_URLS: Record<string, string> = {
 };
 
 export class SessionManager {
-  private views: Map<string, BrowserView> = new Map();
+  private views: Map<string, WebContentsView> = new Map();
   private interceptors: Map<string, ResponseInterceptor> = new Map();
+  private resizeHandlers: Map<string, () => void> = new Map();
   private activeSessionId: string | null = null;
   private mainWindow: BrowserWindow;
 
@@ -57,8 +58,8 @@ export class SessionManager {
       })
     });
 
-    // Create BrowserView with isolated partition
-    const view = new BrowserView({
+    // Create WebContentsView with isolated partition
+    const view = new WebContentsView({
       webPreferences: {
         partition: partition,
         nodeIntegration: false,
@@ -111,7 +112,7 @@ export class SessionManager {
   }
 
   /**
-   * Activate a session (attach its BrowserView to the window)
+   * Activate a session (attach its WebContentsView to the window)
    */
   activateSession(sessionId: string): boolean {
     const view = this.views.get(sessionId);
@@ -125,12 +126,17 @@ export class SessionManager {
     if (this.activeSessionId) {
       const currentView = this.views.get(this.activeSessionId);
       if (currentView) {
-        this.mainWindow.removeBrowserView(currentView);
+        this.mainWindow.contentView.removeChildView(currentView);
+        // Remove resize handler for previous view
+        const oldResizeHandler = this.resizeHandlers.get(this.activeSessionId);
+        if (oldResizeHandler) {
+          this.mainWindow.off('resize', oldResizeHandler);
+        }
       }
     }
 
     // Attach new view
-    this.mainWindow.addBrowserView(view);
+    this.mainWindow.contentView.addChildView(view);
 
     // Set bounds to fill the window (adjust as needed for UI layout)
     const bounds = this.mainWindow.getBounds();
@@ -141,10 +147,18 @@ export class SessionManager {
       height: bounds.height - 60
     });
 
-    view.setAutoResize({
-      width: true,
-      height: true
-    });
+    // Create and store resize handler for manual resize management
+    const resizeHandler = () => {
+      const bounds = this.mainWindow.getBounds();
+      view.setBounds({
+        x: 0,
+        y: 60,
+        width: bounds.width,
+        height: bounds.height - 60
+      });
+    };
+    this.mainWindow.on('resize', resizeHandler);
+    this.resizeHandlers.set(sessionId, resizeHandler);
 
     this.activeSessionId = sessionId;
 
@@ -157,7 +171,7 @@ export class SessionManager {
   }
 
   /**
-   * Delete a session and its BrowserView
+   * Delete a session and its WebContentsView
    */
   async deleteSession(sessionId: string): Promise<boolean> {
     const view = this.views.get(sessionId);
@@ -178,13 +192,18 @@ export class SessionManager {
 
     // Remove from window if currently active
     if (this.activeSessionId === sessionId) {
-      this.mainWindow.removeBrowserView(view);
+      this.mainWindow.contentView.removeChildView(view);
       this.activeSessionId = null;
+      // Remove resize handler
+      const resizeHandler = this.resizeHandlers.get(sessionId);
+      if (resizeHandler) {
+        this.mainWindow.off('resize', resizeHandler);
+        this.resizeHandlers.delete(sessionId);
+      }
     }
 
-    // Destroy the view
-    // @ts-expect-error - destroy exists but not in types
-    view.webContents.destroy();
+    // Close webContents before destroying to prevent memory leaks
+    view.webContents.close();
 
     // Remove from map
     this.views.delete(sessionId);
@@ -212,9 +231,9 @@ export class SessionManager {
   }
 
   /**
-   * Get BrowserView for a session
+   * Get WebContentsView for a session
    */
-  getView(sessionId: string): BrowserView | undefined {
+  getView(sessionId: string): WebContentsView | undefined {
     return this.views.get(sessionId);
   }
 
@@ -235,8 +254,8 @@ export class SessionManager {
       console.log(`[SessionManager] Restoring session: ${session.id} (${session.provider})`);
 
       try {
-        // Create BrowserView with existing partition
-        const view = new BrowserView({
+        // Create WebContentsView with existing partition
+        const view = new WebContentsView({
           webPreferences: {
             partition: session.partition,
             nodeIntegration: false,
@@ -318,16 +337,22 @@ export class SessionManager {
 
       // Remove from window
       if (this.activeSessionId === sessionId) {
-        this.mainWindow.removeBrowserView(view);
+        this.mainWindow.contentView.removeChildView(view);
       }
 
-      // Destroy view
-      // @ts-expect-error - destroy exists but not in types
-      view.webContents.destroy();
+      // Remove resize handler
+      const resizeHandler = this.resizeHandlers.get(sessionId);
+      if (resizeHandler) {
+        this.mainWindow.off('resize', resizeHandler);
+      }
+
+      // Close webContents before destroying to prevent memory leaks
+      view.webContents.close();
     }
 
     this.views.clear();
     this.interceptors.clear();
+    this.resizeHandlers.clear();
     this.activeSessionId = null;
 
     console.log('[SessionManager] Cleanup complete');
