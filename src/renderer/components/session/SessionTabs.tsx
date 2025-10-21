@@ -3,6 +3,9 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { Plus, X } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'
 import { ProviderType } from '../../types/session'
+import { Badge } from '../ui/badge'
+import { ProviderSelectionDialog } from './ProviderSelectionDialog'
+import { CloseSessionDialog } from './CloseSessionDialog'
 
 const PROVIDER_COLORS: Record<ProviderType, string> = {
   claude: 'bg-blue-500',
@@ -10,6 +13,14 @@ const PROVIDER_COLORS: Record<ProviderType, string> = {
   gemini: 'bg-purple-500',
   perplexity: 'bg-cyan-500',
   custom: 'bg-gray-500',
+}
+
+const PROVIDER_NAMES: Record<ProviderType, string> = {
+  claude: 'Claude',
+  chatgpt: 'ChatGPT',
+  gemini: 'Gemini',
+  perplexity: 'Perplexity',
+  custom: 'Custom',
 }
 
 interface SessionTabProps {
@@ -115,19 +126,27 @@ export function SessionTabs() {
   const { sessions, activeSessionId, addSession, removeSession, setActiveSession, renameSession } =
     useSessionStore()
 
+  const [showProviderDialog, setShowProviderDialog] = useState(false)
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [sessionToClose, setSessionToClose] = useState<{ id: string; name: string } | null>(null)
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + T: New session
       if ((e.metaKey || e.ctrlKey) && e.key === 't') {
         e.preventDefault()
-        addSession('claude')
+        setShowProviderDialog(true)
       }
 
       // Cmd/Ctrl + W: Close active session
       if ((e.metaKey || e.ctrlKey) && e.key === 'w' && activeSessionId) {
         e.preventDefault()
-        removeSession(activeSessionId)
+        const session = sessions.find((s) => s.id === activeSessionId)
+        if (session) {
+          setSessionToClose({ id: session.id, name: session.name })
+          setShowCloseDialog(true)
+        }
       }
 
       // Cmd/Ctrl + 1-9: Switch to session by index
@@ -142,7 +161,7 @@ export function SessionTabs() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [sessions, activeSessionId, addSession, removeSession, setActiveSession])
+  }, [sessions, activeSessionId, setActiveSession])
 
   // Initialize with a default session if none exist
   useEffect(() => {
@@ -152,30 +171,46 @@ export function SessionTabs() {
   }, [])
 
   const handleAddSession = () => {
-    // For now, default to Claude. In the future, could open a modal to select provider
-    addSession('claude')
+    setShowProviderDialog(true)
+  }
+
+  const handleSelectProvider = (provider: ProviderType, customUrl?: string) => {
+    addSession(provider, customUrl)
+  }
+
+  const handleRequestClose = (sessionId: string, sessionName: string) => {
+    setSessionToClose({ id: sessionId, name: sessionName })
+    setShowCloseDialog(true)
+  }
+
+  const handleConfirmClose = () => {
+    if (sessionToClose) {
+      removeSession(sessionToClose.id)
+      setSessionToClose(null)
+    }
   }
 
   return (
-    <Tabs.Root
-      value={activeSessionId || undefined}
-      onValueChange={setActiveSession}
-      className="flex h-full flex-col"
-    >
-      {/* Tab List */}
-      <Tabs.List className="flex items-center border-b bg-muted/30">
-        {sessions.map((session) => (
-          <SessionTab
-            key={session.id}
-            id={session.id}
-            name={session.name}
-            provider={session.provider}
-            isActive={session.id === activeSessionId}
-            onClose={() => removeSession(session.id)}
-            onRename={(newName) => renameSession(session.id, newName)}
-            onSelect={() => setActiveSession(session.id)}
-          />
-        ))}
+    <>
+      <Tabs.Root
+        value={activeSessionId || undefined}
+        onValueChange={setActiveSession}
+        className="flex h-full flex-col"
+      >
+        {/* Tab List */}
+        <Tabs.List className="flex items-center border-b bg-muted/30">
+          {sessions.map((session) => (
+            <SessionTab
+              key={session.id}
+              id={session.id}
+              name={session.name}
+              provider={session.provider}
+              isActive={session.id === activeSessionId}
+              onClose={() => handleRequestClose(session.id, session.name)}
+              onRename={(newName) => renameSession(session.id, newName)}
+              onSelect={() => setActiveSession(session.id)}
+            />
+          ))}
 
         {/* Add Session Button */}
         <button
@@ -206,7 +241,10 @@ export function SessionTabs() {
             <div className="text-center">
               <div className={`mx-auto mb-4 h-16 w-16 rounded-full ${PROVIDER_COLORS[session.provider]}`}></div>
               <h3 className="text-lg font-semibold">{session.name}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{session.url}</p>
+              <Badge variant="secondary" className="mt-2">
+                {PROVIDER_NAMES[session.provider]}
+              </Badge>
+              <p className="mt-3 text-sm text-muted-foreground">{session.url}</p>
               <p className="mt-4 text-xs text-muted-foreground">
                 BrowserView will be embedded here
               </p>
@@ -214,6 +252,22 @@ export function SessionTabs() {
           </div>
         </Tabs.Content>
       ))}
-    </Tabs.Root>
+      </Tabs.Root>
+
+      {/* Provider Selection Dialog */}
+      <ProviderSelectionDialog
+        open={showProviderDialog}
+        onOpenChange={setShowProviderDialog}
+        onSelect={handleSelectProvider}
+      />
+
+      {/* Close Confirmation Dialog */}
+      <CloseSessionDialog
+        open={showCloseDialog}
+        onOpenChange={setShowCloseDialog}
+        sessionName={sessionToClose?.name || ''}
+        onConfirm={handleConfirmClose}
+      />
+    </>
   )
 }
