@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 import { db } from './database/db.js'
 import { SessionManager } from './session/SessionManager.js'
+import { createUpdater } from './updater/AutoUpdater.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -72,6 +74,20 @@ app.whenReady().then(() => {
 
   // Register IPC handlers
   registerIpcHandlers()
+
+  // Initialize auto-updater (only in production)
+  if (process.env.NODE_ENV !== 'development') {
+    const updater = createUpdater({
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      checkOnStartup: true,
+      checkInterval: 4 * 60 * 60 * 1000, // Check every 4 hours
+      allowPrerelease: false,
+    })
+    updater.setMainWindow(window)
+    updater.start()
+    console.log('[App] Auto-updater initialized')
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -247,6 +263,184 @@ function registerIpcHandlers() {
       return { success: true, stats }
     } catch (error) {
       console.error('[IPC] data:getStats error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Export: Show save dialog
+  ipcMain.handle('export:showSaveDialog', async (_event, options: {
+    defaultPath?: string
+    filters?: Array<{ name: string; extensions: string[] }>
+  }) => {
+    try {
+      if (!mainWindow) throw new Error('Main window not available')
+
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export Research Data',
+        defaultPath: options.defaultPath,
+        filters: options.filters || [
+          { name: 'JSON Files', extensions: ['json'] },
+          { name: 'CSV Files', extensions: ['csv'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+
+      return { success: true, filePath: result.filePath, canceled: result.canceled }
+    } catch (error) {
+      console.error('[IPC] export:showSaveDialog error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Export: Write JSON (non-streaming)
+  ipcMain.handle('export:writeJson', async (_event, filePath: string, data: any) => {
+    try {
+      const jsonContent = JSON.stringify(data, null, 2)
+      fs.writeFileSync(filePath, jsonContent, 'utf-8')
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] export:writeJson error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Export: Write JSON with streaming and progress updates
+  ipcMain.handle('export:writeJsonStream', async (event, filePath: string, filters: any = {}) => {
+    try {
+      const captures = db.getCaptures(filters)
+      const totalRecords = captures.length
+
+      // Open file stream
+      const writeStream = fs.createWriteStream(filePath, { encoding: 'utf-8' })
+
+      // Write opening bracket
+      writeStream.write('[\n')
+
+      let processed = 0
+      for (let i = 0; i < captures.length; i++) {
+        const capture = captures[i]
+        const json = JSON.stringify(capture, null, 2)
+
+        // Indent the JSON object
+        const indentedJson = json.split('\n').map(line => '  ' + line).join('\n')
+
+        if (i > 0) {
+          writeStream.write(',\n')
+        }
+        writeStream.write(indentedJson)
+
+        processed++
+
+        // Send progress update every 100 records or on last record
+        if (processed % 100 === 0 || processed === totalRecords) {
+          event.sender.send('export:progress', {
+            processed,
+            total: totalRecords,
+            percentage: Math.round((processed / totalRecords) * 100)
+          })
+        }
+      }
+
+      // Write closing bracket
+      writeStream.write('\n]')
+      writeStream.end()
+
+      // Wait for stream to finish
+      await new Promise<void>((resolve, reject) => {
+        writeStream.on('finish', () => resolve())
+        writeStream.on('error', reject)
+      })
+
+      return { success: true, recordsExported: totalRecords }
+    } catch (error) {
+      console.error('[IPC] export:writeJsonStream error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Export: Write CSV with streaming and progress updates
+  ipcMain.handle('export:writeCsv', async (event, filePath: string, filters: any = {}) => {
+    try {
+      const captures = db.getCaptures(filters)
+      const totalRecords = captures.length
+
+      if (totalRecords === 0) {
+        return { success: false, error: 'No records to export' }
+      }
+
+      // Open file stream
+      const writeStream = fs.createWriteStream(filePath, { encoding: 'utf-8' })
+
+      // CSV Helper function to escape fields
+      const escapeCsvField = (field: any): string => {
+        if (field === null || field === undefined) return ''
+        const str = String(field)
+        // If field contains comma, quote, or newline, wrap in quotes and escape quotes
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`
+        }
+        return str
+      }
+
+      // Write CSV header
+      const headers = [
+        'id',
+        'session_id',
+        'provider',
+        'prompt',
+        'response',
+        'response_format',
+        'model',
+        'timestamp',
+        'token_count',
+        'tags',
+        'notes',
+        'is_archived'
+      ]
+      writeStream.write(headers.join(',') + '\n')
+
+      // Write CSV rows
+      let processed = 0
+      for (const capture of captures) {
+        const row = [
+          escapeCsvField(capture.id),
+          escapeCsvField(capture.session_id),
+          escapeCsvField(capture.provider),
+          escapeCsvField(capture.prompt),
+          escapeCsvField(capture.response),
+          escapeCsvField(capture.response_format),
+          escapeCsvField(capture.model),
+          escapeCsvField(capture.timestamp),
+          escapeCsvField(capture.token_count),
+          escapeCsvField(capture.tags),
+          escapeCsvField(capture.notes),
+          escapeCsvField(capture.is_archived)
+        ]
+        writeStream.write(row.join(',') + '\n')
+
+        processed++
+
+        // Send progress update every 100 records or on last record
+        if (processed % 100 === 0 || processed === totalRecords) {
+          event.sender.send('export:progress', {
+            processed,
+            total: totalRecords,
+            percentage: Math.round((processed / totalRecords) * 100)
+          })
+        }
+      }
+
+      writeStream.end()
+
+      // Wait for stream to finish
+      await new Promise<void>((resolve, reject) => {
+        writeStream.on('finish', () => resolve())
+        writeStream.on('error', reject)
+      })
+
+      return { success: true, recordsExported: totalRecords }
+    } catch (error) {
+      console.error('[IPC] export:writeCsv error:', error)
       return { success: false, error: (error as Error).message }
     }
   })
