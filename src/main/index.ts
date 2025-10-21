@@ -6,8 +6,13 @@ import { db } from './database/db.js'
 import { SessionManager } from './session/SessionManager.js'
 import { createUpdater } from './updater/AutoUpdater.js'
 
+// Define __filename and __dirname for ES modules and make them global for dependencies
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Make available globally for bundled dependencies that expect them
+;(global as any).__filename = __filename
+;(global as any).__dirname = __dirname
 
 let mainWindow: BrowserWindow | null = null
 let sessionManager: SessionManager | null = null
@@ -20,7 +25,7 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false, // Must be false for preload scripts to have access to require()
     },
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
@@ -67,10 +72,14 @@ app.whenReady().then(() => {
   // Initialize session manager
   sessionManager = new SessionManager(window)
 
-  // Load persisted sessions
-  sessionManager.loadPersistedSessions().catch(error => {
-    console.error('[App] Failed to load persisted sessions:', error)
-  })
+  // Load persisted sessions (skip in test mode to avoid BrowserView interference)
+  if (process.env.SKIP_SESSION_RESTORE !== '1') {
+    sessionManager.loadPersistedSessions().catch(error => {
+      console.error('[App] Failed to load persisted sessions:', error)
+    })
+  } else {
+    console.log('[App] Skipping session restore (test mode)')
+  }
 
   // Register IPC handlers
   registerIpcHandlers()
@@ -444,6 +453,88 @@ function registerIpcHandlers() {
       return { success: false, error: (error as Error).message }
     }
   })
+
+  // ==================== TEST-ONLY IPC HANDLERS ====================
+  // These handlers are only available in test/development mode to help with E2E testing
+  if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+    // Test: Create capture
+    ipcMain.handle('test:createCapture', async (_event, captureData: {
+      id: string
+      session_id: string
+      provider: string
+      prompt: string
+      response: string
+      model?: string
+      tags?: string
+      notes?: string
+      token_count?: number
+      response_format?: string
+    }) => {
+      try {
+        const capture = db.createCapture(captureData)
+        return { success: true, capture }
+      } catch (error) {
+        console.error('[IPC] test:createCapture error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    // Test: Create session
+    ipcMain.handle('test:createSession', async (_event, sessionData: {
+      id: string
+      provider: string
+      name: string
+      partition?: string
+    }) => {
+      try {
+        const session = db.createSession({
+          ...sessionData,
+          partition: sessionData.partition || `persist:${sessionData.provider}`,
+        })
+        return { success: true, session }
+      } catch (error) {
+        console.error('[IPC] test:createSession error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    // Test: Clear all captures
+    ipcMain.handle('test:clearCaptures', async () => {
+      try {
+        const dbInstance = db.getDb()
+        dbInstance.prepare('DELETE FROM captures').run()
+        return { success: true }
+      } catch (error) {
+        console.error('[IPC] test:clearCaptures error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    // Test: Clear all sessions
+    ipcMain.handle('test:clearSessions', async () => {
+      try {
+        const dbInstance = db.getDb()
+        dbInstance.prepare('DELETE FROM sessions').run()
+        return { success: true }
+      } catch (error) {
+        console.error('[IPC] test:clearSessions error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    // Test: Get all sessions
+    ipcMain.handle('test:getSessions', async () => {
+      try {
+        const sessions = db.getSessions(true)
+        return { success: true, data: sessions }
+      } catch (error) {
+        console.error('[IPC] test:getSessions error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    console.log('[IPC] Test handlers registered (test/development mode)')
+  }
 
   console.log('[IPC] Handlers registered successfully')
 }
