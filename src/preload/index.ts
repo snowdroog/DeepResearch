@@ -37,6 +37,24 @@ const electronAPI = {
     deleteCapture: (captureId: string) => ipcRenderer.invoke('data:deleteCapture', captureId),
     getStats: () => ipcRenderer.invoke('data:getStats'),
   },
+
+  // Export operations
+  export: {
+    showSaveDialog: (options: {
+      defaultPath?: string
+      filters?: Array<{ name: string; extensions: string[] }>
+    }) => ipcRenderer.invoke('export:showSaveDialog', options),
+    writeJson: (filePath: string, data: any) => ipcRenderer.invoke('export:writeJson', filePath, data),
+    writeJsonStream: (filePath: string, filters?: Record<string, unknown>) =>
+      ipcRenderer.invoke('export:writeJsonStream', filePath, filters),
+    writeCsv: (filePath: string, filters?: Record<string, unknown>) =>
+      ipcRenderer.invoke('export:writeCsv', filePath, filters),
+    onProgress: (callback: (progress: { processed: number; total: number; percentage: number }) => void) => {
+      const listener = (_event: any, progress: any) => callback(progress)
+      ipcRenderer.on('export:progress', listener)
+      return () => ipcRenderer.removeListener('export:progress', listener)
+    },
+  },
 }
 
 // Expose protected APIs to renderer
