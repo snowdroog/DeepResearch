@@ -1,0 +1,260 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript type checking
+        run: npx tsc --noEmit
+
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Linux-specific: Install system dependencies for better-sqlite3
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3
+
+      # macOS-specific: Ensure build tools are available
+      - name: Setup macOS build tools
+        if: runner.os == 'macOS'
+        run: |
+          # Xcode command line tools should already be installed
+          xcode-select --print-path
+
+      # Windows-specific: Setup build tools for native modules
+      - name: Setup Windows build tools
+        if: runner.os == 'Windows'
+        run: |
+          npm install --global windows-build-tools
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # Ensure native modules are rebuilt for the current platform
+          npm_config_build_from_source: true
+
+      - name: Run renderer tests with coverage
+        run: npm run test:renderer -- --run --coverage
+        env:
+          CI: true
+
+      - name: Run main process tests with coverage
+        run: npm run test:main -- --run --coverage
+        env:
+          CI: true
+
+      - name: Upload renderer coverage to artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-renderer
+          path: coverage/
+          retention-days: 7
+
+      - name: Upload main coverage to artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-main
+          path: coverage/
+          retention-days: 7
+
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Linux-specific: Install system dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            python3 \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libdbus-1-3 \
+            libxkbcommon0 \
+            libatspi2.0-0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2 \
+            xvfb
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          npm_config_build_from_source: true
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Linux: Use xvfb for headless display
+      - name: Run E2E tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" npm run test:e2e
+        env:
+          CI: true
+          DISPLAY: ':99.0'
+
+      # macOS and Windows: Run directly
+      - name: Run E2E tests (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: |
+            e2e-results/
+            playwright-report/
+          retention-days: 7
+
+      - name: Upload E2E videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-videos-${{ matrix.os }}
+          path: e2e-results/artifacts/**/*.webm
+          retention-days: 7
+
+  coverage-report:
+    name: Upload Coverage to Codecov
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download renderer coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-renderer
+          path: ./coverage-renderer
+        continue-on-error: true
+
+      - name: Download main coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-main
+          path: ./coverage-main
+        continue-on-error: true
+
+      # Optional: Upload to Codecov
+      # Uncomment and add CODECOV_TOKEN to repository secrets to enable
+      # - name: Upload coverage to Codecov
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     files: ./coverage-renderer/lcov.info,./coverage-main/lcov.info
+      #     flags: unittests
+      #     name: codecov-umbrella
+      #     fail_ci_if_error: false
+      #   env:
+      #     CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Create coverage summary
+        run: |
+          echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage reports have been uploaded as artifacts." >> $GITHUB_STEP_SUMMARY
+          echo "Download them from the Actions tab to view detailed coverage." >> $GITHUB_STEP_SUMMARY
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, unit-tests, e2e-tests]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint & Type Check: ${{ needs.lint-and-typecheck.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- E2E Tests: ${{ needs.e2e-tests.result }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.lint-and-typecheck.result }}" != "success" ] || \
+             [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.e2e-tests.result }}" != "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Some tests failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ All tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          fi

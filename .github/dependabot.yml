@@ -1,0 +1,78 @@
+# Dependabot configuration for automated dependency updates
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  # Maintain dependencies for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "snowdroog"
+    assignees:
+      - "snowdroog"
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    # Group updates for related packages
+    groups:
+      # Group Electron-related packages
+      electron:
+        patterns:
+          - "electron*"
+          - "vite-plugin-electron*"
+      # Group testing packages
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "@vitest/*"
+          - "vitest"
+          - "@playwright/*"
+          - "playwright"
+      # Group TypeScript and build tools
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+          - "@typescript-eslint/*"
+      # Group UI libraries
+      ui:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+          - "@radix-ui/*"
+          - "lucide-react"
+      # Group build and bundling tools
+      build-tools:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "electron-builder"
+          - "esbuild"
+          - "rollup"
+
+  # Maintain GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "snowdroog"
+    labels:
+      - "github-actions"
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
