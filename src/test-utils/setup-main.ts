@@ -23,6 +23,8 @@ vi.mock('electron', () => {
     loadURL: vi.fn(),
     loadFile: vi.fn(),
     on: vi.fn(),
+    off: vi.fn(),
+    removeListener: vi.fn(),
     webContents: {
       send: vi.fn(),
       on: vi.fn(),
@@ -40,25 +42,40 @@ vi.mock('electron', () => {
     },
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1200, height: 800 })),
   })),
-  WebContentsView: vi.fn().mockImplementation(() => ({
-    webContents: {
-      loadURL: vi.fn(),
-      getURL: vi.fn(() => 'https://example.com'),
-      send: vi.fn(),
-      once: vi.fn(),
-      on: vi.fn(),
-      destroy: vi.fn(),
-      close: vi.fn(),
-      debugger: {
-        attach: vi.fn(),
-        detach: vi.fn(),
-        sendCommand: vi.fn(),
+  WebContentsView: class {
+    webContents: any;
+    constructor(options?: any) {
+      this.webContents = {
+        loadURL: vi.fn().mockResolvedValue(undefined),
+        getURL: vi.fn(() => 'https://example.com'),
+        send: vi.fn(),
+        once: vi.fn((event: string, listener: Function) => {
+          // Automatically call 'did-finish-load' listeners for testing
+          if (event === 'did-finish-load') {
+            setTimeout(() => listener(), 0);
+          }
+        }),
         on: vi.fn(),
-      },
-    },
-    setBounds: vi.fn(),
-    getBounds: vi.fn(() => ({ x: 0, y: 0, width: 800, height: 600 })),
-  })),
+        off: vi.fn(),
+        removeListener: vi.fn(),
+        destroy: vi.fn(),
+        close: vi.fn(),
+        isDestroyed: vi.fn(() => false),
+        session: {
+          partition: options?.webPreferences?.partition || 'default',
+        },
+        debugger: {
+          attach: vi.fn(),
+          detach: vi.fn(),
+          sendCommand: vi.fn(),
+          on: vi.fn(),
+        },
+        setWindowOpenHandler: vi.fn(),
+      };
+    }
+    setBounds = vi.fn();
+    getBounds = vi.fn(() => ({ x: 0, y: 0, width: 800, height: 600 }));
+  },
   BrowserView: vi.fn().mockImplementation(() => ({
     webContents: {
       loadURL: vi.fn(),

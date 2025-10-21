@@ -1,12 +1,9 @@
-import * as React from 'react'
-import { Settings } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/renderer/components/ui/dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Label } from '@/renderer/components/ui/label'
@@ -22,8 +19,12 @@ import {
 import { ScrollArea } from '@/renderer/components/ui/scroll-area'
 import { useSettingsStore } from '@/renderer/stores/settingsStore'
 
-export function SettingsDialog() {
-  const [open, setOpen] = React.useState(false)
+interface SettingsDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const {
     settings,
     updateGeneralSettings,
@@ -37,12 +38,7 @@ export function SettingsDialog() {
   } = useSettingsStore()
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="icon">
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>

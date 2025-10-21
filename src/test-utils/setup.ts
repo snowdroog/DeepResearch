@@ -87,6 +87,22 @@ beforeAll(() => {
     unobserve() {}
   } as any;
 
+  // Mock PointerEvent for Radix UI (Radix uses PointerEvent internally)
+  if (!global.PointerEvent) {
+    global.PointerEvent = global.MouseEvent as any;
+  }
+
+  // Mock hasPointerCapture and releasePointerCapture for Radix UI
+  if (!HTMLElement.prototype.hasPointerCapture) {
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!HTMLElement.prototype.releasePointerCapture) {
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+  }
+  if (!HTMLElement.prototype.setPointerCapture) {
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+  }
+
   // Suppress console errors in tests (optional)
   // You can comment this out if you want to see all console output
   const originalConsoleError = console.error;

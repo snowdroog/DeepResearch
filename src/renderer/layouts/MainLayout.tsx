@@ -16,6 +16,7 @@ export function MainLayout() {
 
   const isDataPanelCollapsed = panels.isDataPanelCollapsed
   const showExport = dialogs.export
+  const showSettings = dialogs.settings
 
   // Load captures when export dialog is opened
   useEffect(() => {
@@ -53,7 +54,10 @@ export function MainLayout() {
       </header>
 
       {/* Settings Dialog */}
-      <SettingsDialog />
+      <SettingsDialog
+        open={showSettings}
+        onOpenChange={(open: boolean) => setDialogOpen('settings', open)}
+      />
 
       {/* Export Dialog */}
       <ExportDialog

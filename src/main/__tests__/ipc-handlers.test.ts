@@ -17,6 +17,34 @@ import { ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
+// Mock Electron dialog module before tests run
+vi.mock('electron', async () => {
+  const actual = await vi.importActual('electron');
+  return {
+    ...actual,
+    dialog: {
+      showOpenDialog: vi.fn(() =>
+        Promise.resolve({
+          canceled: false,
+          filePaths: ['/mock/selected/path'],
+        })
+      ),
+      showSaveDialog: vi.fn(() =>
+        Promise.resolve({
+          canceled: false,
+          filePath: '/mock/save/path',
+        })
+      ),
+      showMessageBox: vi.fn(() =>
+        Promise.resolve({
+          response: 0,
+          checkboxChecked: false,
+        })
+      ),
+    },
+  };
+});
+
 // Mock types for our tests
 interface IpcHandleCallback {
   (event: any, ...args: any[]): Promise<any> | any;
