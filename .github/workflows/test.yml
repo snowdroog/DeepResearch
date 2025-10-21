@@ -201,14 +201,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download renderer coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-renderer
           path: ./coverage-renderer
         continue-on-error: true
 
       - name: Download main coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-main
           path: ./coverage-main
