@@ -208,10 +208,11 @@ export function SessionTabs() {
     setShowCloseDialog(true)
   }
 
-  const handleConfirmClose = () => {
+  const handleConfirmClose = async () => {
     if (sessionToClose) {
-      removeSession(sessionToClose.id)
+      await removeSession(sessionToClose.id)
       setSessionToClose(null)
+      setShowCloseDialog(false)
     }
   }
 
