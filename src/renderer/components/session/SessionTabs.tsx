@@ -188,12 +188,8 @@ export function SessionTabs() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [sessions, activeSessionId, setActiveSession])
 
-  // Initialize with a default session if none exist
-  useEffect(() => {
-    if (sessions.length === 0) {
-      addSession('claude')
-    }
-  }, [])
+  // Removed: Auto-create session on startup
+  // User should manually create sessions via the "+" button
 
   const handleAddSession = () => {
     setShowProviderDialog(true)
@@ -256,16 +252,30 @@ export function SessionTabs() {
       </Tabs.List>
 
       {/* Tab Content */}
-      {sessions.map((session) => {
-        const isActive = session.id === activeSessionId
-        return (
-          <SessionTabContent
-            key={session.id}
-            session={session}
-            isActive={isActive}
-          />
-        )
-      })}
+      {sessions.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center bg-muted/10">
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-muted-foreground">No Sessions Open</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Click the <span className="font-semibold">+</span> button above to create your first AI session
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Keyboard shortcut: <kbd className="rounded bg-muted px-1.5 py-0.5">Cmd/Ctrl+T</kbd>
+            </p>
+          </div>
+        </div>
+      ) : (
+        sessions.map((session) => {
+          const isActive = session.id === activeSessionId
+          return (
+            <SessionTabContent
+              key={session.id}
+              session={session}
+              isActive={isActive}
+            />
+          )
+        })
+      )}
       </Tabs.Root>
 
       {/* Provider Selection Dialog */}
