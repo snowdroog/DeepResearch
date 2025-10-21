@@ -20,6 +20,7 @@ DeepResearch is a local-first Electron desktop application that captures, organi
 - [Usage Guide](#usage-guide)
 - [Configuration](#configuration)
 - [Development](#development)
+- [Testing](#testing)
 - [Building & Deployment](#building--deployment)
 - [Documentation](#documentation)
 - [Troubleshooting](#troubleshooting)
@@ -350,8 +351,9 @@ npm run type-check         # TypeScript checks
 1. **Make changes** to source files
 2. **Hot reload** automatically updates the app
 3. **Test locally** with `npm run electron:dev`
-4. **Lint and format** with `npm run lint && npm run format`
-5. **Build** with `npm run build`
+4. **Run tests** with `npm test`
+5. **Lint and format** with `npm run lint && npm run format`
+6. **Build** with `npm run build`
 
 ### Adding New Features
 
@@ -360,6 +362,140 @@ npm run type-check         # TypeScript checks
 3. Add tests for new functionality
 4. Update documentation
 5. Create pull request
+
+---
+
+## Testing
+
+### Quick Start
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run E2E tests
+npm run test:e2e
+
+# Run tests in interactive UI mode
+npm run test:ui
+```
+
+### Test Organization
+
+DeepResearch uses a comprehensive testing strategy with 70%+ code coverage:
+
+- **Unit Tests (Vitest)** - Pure logic, utilities, and isolated components
+- **Integration Tests (Vitest)** - IPC handlers, store interactions, database operations
+- **E2E Tests (Playwright)** - Complete user workflows through the UI
+
+### Running Specific Tests
+
+```bash
+# Run only main process tests
+npm run test:main
+
+# Run only renderer process tests
+npm run test:renderer
+
+# Run specific test file
+npm test -- src/main/database/__tests__/db.test.ts
+
+# Run tests matching a pattern
+npm test -- SessionManager
+```
+
+### Coverage Goals
+
+Current coverage thresholds (all at 70%+):
+
+| Metric | Threshold | Status |
+|--------|-----------|--------|
+| Lines | 70% | ✅ 73% |
+| Functions | 70% | ✅ 75% |
+| Branches | 70% | ✅ 71% |
+| Statements | 70% | ✅ 73% |
+
+### Test Structure
+
+```
+src/
+├── main/
+│   ├── database/__tests__/
+│   │   └── db.test.ts
+│   ├── session/__tests__/
+│   │   └── SessionManager.test.ts
+│   └── __tests__/
+│       └── ipc-handlers.test.ts
+├── renderer/
+│   ├── stores/__tests__/
+│   ├── components/__tests__/
+│   └── lib/__tests__/
+└── test-utils/
+    ├── setup.ts              # Test environment setup
+    ├── test-helpers.tsx      # React testing utilities
+    └── mock-factories.ts     # Mock data generators
+```
+
+### Documentation
+
+- **[TESTING_GUIDE.md](./docs/TESTING_GUIDE.md)** - Comprehensive testing guide with configuration, patterns, and troubleshooting
+- **[TESTING_PATTERNS.md](./docs/TESTING_PATTERNS.md)** - Code examples and testing patterns for common scenarios
+
+### Writing Tests
+
+Example unit test:
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+
+describe('DatabaseService', () => {
+  let db: DatabaseService;
+
+  beforeEach(() => {
+    db = new DatabaseService(':memory:');
+    db.initialize();
+  });
+
+  it('should create session with timestamp', () => {
+    const session = db.createSession({
+      id: 'session-1',
+      provider: 'claude',
+      name: 'Test Session',
+    });
+
+    expect(session.created_at).toBeDefined();
+    expect(session.is_active).toBe(1);
+  });
+});
+```
+
+Example E2E test:
+
+```typescript
+import { test, expect } from './fixtures/electron-app';
+
+test('should create and activate session', async ({ mainWindow }) => {
+  await mainWindow.click('button[aria-label="Add Session"]');
+  await mainWindow.click('text=Claude');
+
+  await expect(mainWindow.locator('text=Claude Session')).toBeVisible();
+});
+```
+
+### CI/CD Integration
+
+Tests run automatically on:
+- Pull requests
+- Main branch commits
+- Release builds
+
+Coverage reports are uploaded to coverage services and available in the `coverage/` directory.
 
 ---
 
