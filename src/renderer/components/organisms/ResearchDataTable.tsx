@@ -15,7 +15,6 @@ import { ArrowUpDown, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import { format } from 'date-fns'
 import { Button } from '@/renderer/components/ui/button'
 import { Checkbox } from '@/renderer/components/ui/checkbox'
-import { Input } from '@/renderer/components/ui/input'
 import {
   Table,
   TableBody,
@@ -269,29 +268,8 @@ export function ResearchDataTable({
 
   return (
     <div className="w-full space-y-4">
-      {/* Filters and controls */}
+      {/* Controls */}
       <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-2 flex-1">
-          <Input
-            placeholder="Filter by provider..."
-            value={
-              (table.getColumn('provider')?.getFilterValue() as string) ?? ''
-            }
-            onChange={(event) =>
-              table.getColumn('provider')?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
-          <Input
-            placeholder="Filter by tags..."
-            value={(table.getColumn('tags')?.getFilterValue() as string) ?? ''}
-            onChange={(event) =>
-              table.getColumn('tags')?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
-        </div>
-
         {/* Column visibility dropdown */}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
