@@ -28,6 +28,41 @@ export const useSessionStore = create<SessionState>()((set) => ({
       sessions: [],
       activeSessionId: null,
 
+      loadSessions: async () => {
+        console.log('[SessionStore] Loading sessions from database...')
+        const result = await window.electronAPI.sessions.list(false) // Only active sessions
+
+        if (!result.success) {
+          console.error('[SessionStore] Failed to load sessions:', result.error)
+          return
+        }
+
+        console.log('[SessionStore] Loaded sessions from database:', result.sessions)
+
+        // Map database sessions to UI sessions
+        const uiSessions: Session[] = result.sessions.map((dbSession: any) => {
+          // Map provider type
+          let provider: ProviderType
+          if (dbSession.provider === 'openai') provider = 'chatgpt'
+          else if (dbSession.provider === 'gemini') provider = 'gemini'
+          else if (dbSession.provider === 'claude') provider = 'claude'
+          else provider = 'custom'
+
+          return {
+            id: dbSession.id,
+            name: dbSession.name,
+            provider,
+            url: PROVIDER_URLS[provider],
+            isActive: false,
+            createdAt: new Date(dbSession.created_at),
+            lastActiveAt: new Date(dbSession.last_active),
+          }
+        })
+
+        set({ sessions: uiSessions })
+        console.log('[SessionStore] UI sessions updated:', uiSessions.length)
+      },
+
       addSession: async (provider: ProviderType, url?: string) => {
         // Create session via IPC
         const result = await window.electronAPI.sessions.create({

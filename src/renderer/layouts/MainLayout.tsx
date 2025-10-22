@@ -14,11 +14,16 @@ import { useSessionStore } from '../stores/sessionStore'
 export function MainLayout() {
   const { captures, fetchCaptures } = useCapturesStore()
   const { dialogs, setDialogOpen, panels, setPanelCollapsed } = useUIStore()
-  const { activeSessionId } = useSessionStore()
+  const { activeSessionId, loadSessions } = useSessionStore()
 
   const isDataPanelCollapsed = panels.isDataPanelCollapsed
   const showExport = dialogs.export
   const showSettings = dialogs.settings
+
+  // Load sessions from database on mount
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
 
   // Load captures when export dialog is opened
   useEffect(() => {
