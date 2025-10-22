@@ -9,10 +9,12 @@ import { ExportDialog } from '../components/export/ExportDialog'
 import { Button } from '../components/ui/button'
 import { useCapturesStore } from '../stores/capturesStore'
 import { useUIStore } from '../stores/uiStore'
+import { useSessionStore } from '../stores/sessionStore'
 
 export function MainLayout() {
   const { captures, fetchCaptures } = useCapturesStore()
   const { dialogs, setDialogOpen, panels, setPanelCollapsed } = useUIStore()
+  const { activeSessionId } = useSessionStore()
 
   const isDataPanelCollapsed = panels.isDataPanelCollapsed
   const showExport = dialogs.export
@@ -24,6 +26,22 @@ export function MainLayout() {
       fetchCaptures() // Get all captures including archived
     }
   }, [showExport, fetchCaptures])
+
+  // Hide/show active WebContentsView when any dialog opens/closes
+  // This prevents dialogs from appearing behind the native Electron view
+  useEffect(() => {
+    if (!activeSessionId) return
+
+    const anyDialogOpen = showExport || showSettings
+
+    if (anyDialogOpen) {
+      // Hide the view when a dialog opens
+      window.electronAPI.views.setVisible(activeSessionId, false)
+    } else {
+      // Show the view when all dialogs are closed
+      window.electronAPI.views.setVisible(activeSessionId, true)
+    }
+  }, [activeSessionId, showExport, showSettings])
 
   return (
     <div className="flex h-screen flex-col">

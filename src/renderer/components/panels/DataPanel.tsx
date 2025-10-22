@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { CaptureDetailDialog } from '../capture/CaptureDetailDialog'
 import { useCapturesStore } from '../../stores/capturesStore'
+import { useSessionStore } from '../../stores/sessionStore'
 
 interface DataPanelProps {
   isCollapsed: boolean
@@ -14,6 +15,7 @@ export function DataPanel({ isCollapsed, onToggleCollapse }: DataPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
   const { captures, loading, fetchCaptures, searchCaptures } = useCapturesStore()
+  const { activeSessionId } = useSessionStore()
 
   // Fetch captures on mount
   useEffect(() => {
@@ -39,11 +41,19 @@ export function DataPanel({ isCollapsed, onToggleCollapse }: DataPanelProps) {
   const handleCaptureClick = (captureId: string) => {
     setSelectedCaptureId(captureId)
     setShowDetailDialog(true)
+    // Hide active WebContentsView so dialog appears on top
+    if (activeSessionId) {
+      window.electronAPI.views.setVisible(activeSessionId, false)
+    }
   }
 
   const handleDialogClose = () => {
     setShowDetailDialog(false)
     setSelectedCaptureId(null)
+    // Show active WebContentsView again
+    if (activeSessionId) {
+      window.electronAPI.views.setVisible(activeSessionId, true)
+    }
   }
 
   const formatTimeAgo = (timestamp: number) => {
