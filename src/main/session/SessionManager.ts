@@ -39,12 +39,23 @@ export class SessionManager {
 
   /**
    * Create a new session with isolated partition
+   * Enforces one session per provider constraint
    */
   async createSession(config: SessionConfig): Promise<Session> {
+    // Check if session for this provider already exists
+    const existingSessions = db.getSessions(true);
+    const existingProviderSession = existingSessions.find(s => s.provider === config.provider);
+
+    if (existingProviderSession) {
+      console.log(`[SessionManager] Session for ${config.provider} already exists: ${existingProviderSession.id}`);
+      console.log(`[SessionManager] Returning existing session instead of creating new one`);
+      return existingProviderSession;
+    }
+
     const sessionId = randomUUID();
     const partition = `persist:${config.provider}-${sessionId}`;
 
-    console.log(`[SessionManager] Creating session: ${sessionId} for ${config.provider}`);
+    console.log(`[SessionManager] Creating new session: ${sessionId} for ${config.provider}`);
 
     // Create database entry first
     const dbSession = db.createSession({
