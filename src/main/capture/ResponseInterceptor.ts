@@ -66,24 +66,29 @@ export class ResponseInterceptor {
    */
   async enable(): Promise<void> {
     if (this.enabled) {
-      console.log('[ResponseInterceptor] Already enabled');
+      console.log(`[ResponseInterceptor] Already enabled for session ${this.sessionId}`);
       return;
     }
 
+    console.log(`[ResponseInterceptor] Starting enable process for session ${this.sessionId} (${this.provider})`);
+
     try {
       // Attach CDP debugger
+      console.log(`[ResponseInterceptor] Step 1/3: Attaching CDP debugger...`);
       await this.attachDebugger();
 
       // Enable Fetch domain with interception
+      console.log(`[ResponseInterceptor] Step 2/3: Enabling Fetch domain...`);
       await this.enableFetchDomain();
 
       // Set up event listeners
+      console.log(`[ResponseInterceptor] Step 3/3: Setting up event listeners...`);
       this.setupEventListeners();
 
       this.enabled = true;
-      console.log(`[ResponseInterceptor] Enabled for session ${this.sessionId} (${this.provider})`);
+      console.log(`[ResponseInterceptor] ✓ Successfully enabled for session ${this.sessionId} (${this.provider})`);
     } catch (error) {
-      console.error('[ResponseInterceptor] Failed to enable:', error);
+      console.error(`[ResponseInterceptor] ✗ Failed to enable for session ${this.sessionId}:`, error);
       throw error;
     }
   }
@@ -111,14 +116,18 @@ export class ResponseInterceptor {
    * Attach CDP debugger to webContents
    */
   private async attachDebugger(): Promise<void> {
-    if (this.debuggerAttached) return;
+    if (this.debuggerAttached) {
+      console.log('[ResponseInterceptor] Debugger already attached, skipping');
+      return;
+    }
 
     try {
+      console.log('[ResponseInterceptor] Attaching CDP debugger version 1.3...');
       this.webContents.debugger.attach('1.3');
       this.debuggerAttached = true;
-      console.log('[ResponseInterceptor] Debugger attached');
+      console.log('[ResponseInterceptor] ✓ Debugger attached successfully');
     } catch (error) {
-      console.error('[ResponseInterceptor] Failed to attach debugger:', error);
+      console.error('[ResponseInterceptor] ✗ Failed to attach debugger:', error);
       throw error;
     }
   }
@@ -130,8 +139,13 @@ export class ResponseInterceptor {
     const providerConfig = PROVIDER_PATTERNS[this.provider as keyof typeof PROVIDER_PATTERNS];
 
     if (!providerConfig) {
-      throw new Error(`Unknown provider: ${this.provider}`);
+      const errorMsg = `Unknown provider: ${this.provider}`;
+      console.error(`[ResponseInterceptor] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
+
+    console.log(`[ResponseInterceptor] Enabling Fetch domain for provider: ${this.provider}`);
+    console.log(`[ResponseInterceptor] URL patterns to intercept:`, providerConfig.patterns);
 
     try {
       // Enable Fetch domain with request patterns
@@ -142,9 +156,9 @@ export class ResponseInterceptor {
         }))
       });
 
-      console.log('[ResponseInterceptor] Fetch domain enabled with patterns:', providerConfig.patterns);
+      console.log('[ResponseInterceptor] ✓ Fetch domain enabled successfully');
     } catch (error) {
-      console.error('[ResponseInterceptor] Failed to enable Fetch domain:', error);
+      console.error('[ResponseInterceptor] ✗ Failed to enable Fetch domain:', error);
       throw error;
     }
   }

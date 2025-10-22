@@ -92,19 +92,33 @@ export class SessionManager {
     );
     this.interceptors.set(sessionId, interceptor);
 
-    // Load initial URL first
+    // Load initial URL
     const initialUrl = config.url || PROVIDER_URLS[config.provider];
-    await view.webContents.loadURL(initialUrl);
+    console.log(`[SessionManager] Loading URL for session ${sessionId}: ${initialUrl}`);
 
-    // Enable interception after page loads
+    // Set up page load event listeners for debugging
+    view.webContents.on('did-start-loading', () => {
+      console.log(`[SessionManager] Page started loading for session ${sessionId}`);
+    });
+
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error(`[SessionManager] Page failed to load for session ${sessionId}: ${errorCode} - ${errorDescription}`);
+    });
+
+    // IMPORTANT: Register did-finish-load listener BEFORE calling loadURL to avoid race condition
     view.webContents.once('did-finish-load', async () => {
+      console.log(`[SessionManager] did-finish-load event fired for session ${sessionId}`);
       try {
+        console.log(`[SessionManager] Attempting to enable interceptor for session ${sessionId}...`);
         await interceptor.enable();
-        console.log(`[SessionManager] Interceptor enabled for session ${sessionId}`);
+        console.log(`[SessionManager] ✓ Interceptor enabled successfully for session ${sessionId}`);
       } catch (error) {
-        console.error(`[SessionManager] Failed to enable interceptor for ${sessionId}:`, error);
+        console.error(`[SessionManager] ✗ Failed to enable interceptor for ${sessionId}:`, error);
       }
     });
+
+    // Load URL after registering the event listener
+    await view.webContents.loadURL(initialUrl);
 
     console.log(`[SessionManager] Session created successfully: ${sessionId}`);
 
@@ -251,11 +265,16 @@ export class SessionManager {
         const metadata = session.metadata ? JSON.parse(session.metadata) : {};
         const lastUrl = metadata.lastUrl || PROVIDER_URLS[session.provider];
 
-        // Load last URL
-        await view.webContents.loadURL(lastUrl);
+        console.log(`[SessionManager] Loading URL for restored session ${session.id}: ${lastUrl}`);
 
-        // Store view
-        this.views.set(session.id, view);
+        // Set up page load event listeners for debugging
+        view.webContents.on('did-start-loading', () => {
+          console.log(`[SessionManager] Page started loading for restored session ${session.id}`);
+        });
+
+        view.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+          console.error(`[SessionManager] Page failed to load for restored session ${session.id}: ${errorCode} - ${errorDescription}`);
+        });
 
         // Create and enable interceptor
         const interceptor = new ResponseInterceptor(
@@ -265,15 +284,23 @@ export class SessionManager {
         );
         this.interceptors.set(session.id, interceptor);
 
-        // Enable interception after page loads
+        // IMPORTANT: Register did-finish-load listener BEFORE calling loadURL to avoid race condition
         view.webContents.once('did-finish-load', async () => {
+          console.log(`[SessionManager] did-finish-load event fired for restored session ${session.id}`);
           try {
+            console.log(`[SessionManager] Attempting to enable interceptor for restored session ${session.id}...`);
             await interceptor.enable();
-            console.log(`[SessionManager] Interceptor enabled for restored session ${session.id}`);
+            console.log(`[SessionManager] ✓ Interceptor enabled successfully for restored session ${session.id}`);
           } catch (error) {
-            console.error(`[SessionManager] Failed to enable interceptor for ${session.id}:`, error);
+            console.error(`[SessionManager] ✗ Failed to enable interceptor for restored session ${session.id}:`, error);
           }
         });
+
+        // Load last URL after registering the event listener
+        await view.webContents.loadURL(lastUrl);
+
+        // Store view
+        this.views.set(session.id, view);
 
         console.log(`[SessionManager] Restored session: ${session.id}`);
       } catch (error) {
