@@ -60,9 +60,11 @@ export class SessionManager {
     // Create database entry first
     const dbSession = db.createSession({
       id: sessionId,
+      session_type: 'provider',
       provider: config.provider,
       name: config.name,
       partition: partition,
+      url: config.url || PROVIDER_URLS[config.provider],
       metadata: JSON.stringify({
         createdBy: 'user',
         initialUrl: config.url || PROVIDER_URLS[config.provider]
@@ -128,10 +130,61 @@ export class SessionManager {
       }
     });
 
+    // Listen for browser notifications to detect deep research completion
+    view.webContents.on('did-create-notification', (_event, notification) => {
+      const title = notification.title.toLowerCase();
+      const body = notification.body?.toLowerCase() || '';
+
+      console.log(`[SessionManager] Notification detected: "${notification.title}"`);
+
+      // Check if this is a deep research completion notification
+      const isDeepResearchComplete =
+        title.includes('research complete') ||
+        title.includes('research finished') ||
+        body.includes('research complete') ||
+        body.includes('research finished') ||
+        body.includes('researching your question') ||
+        (title.includes('claude') && (body.includes('complete') || body.includes('finished')));
+
+      if (isDeepResearchComplete) {
+        console.log(`[SessionManager] 🔬 Deep research completion detected! Auto-capturing page...`);
+
+        // Wait a moment for any final UI updates, then auto-capture
+        setTimeout(async () => {
+          try {
+            const success = await this.captureCurrentPage(sessionId);
+            if (success) {
+              console.log(`[SessionManager] ✓ Auto-capture successful for session ${sessionId}`);
+
+              // Notify the UI that a new capture was created
+              const allWindows = BrowserWindow.getAllWindows();
+              for (const window of allWindows) {
+                window.webContents.send('capture:auto-created', { sessionId });
+              }
+            } else {
+              console.error(`[SessionManager] ✗ Auto-capture failed for session ${sessionId}`);
+            }
+          } catch (error) {
+            console.error(`[SessionManager] Error during auto-capture:`, error);
+          }
+        }, 2000); // Wait 2 seconds for UI to fully update
+      }
+    });
+
     // Load URL after registering the event listener
     await view.webContents.loadURL(initialUrl);
 
     console.log(`[SessionManager] Session created successfully: ${sessionId}`);
+
+    // Broadcast session:created event to all windows for auto-refresh
+    const allWindows = BrowserWindow.getAllWindows();
+    for (const window of allWindows) {
+      window.webContents.send('session:created', {
+        sessionId: dbSession.id,
+        provider: dbSession.provider,
+        name: dbSession.name
+      });
+    }
 
     return dbSession;
   }
@@ -141,10 +194,20 @@ export class SessionManager {
    * Note: Bounds are now controlled by the renderer via IPC
    */
   activateSession(sessionId: string): boolean {
+    // Check if this is a capture session (no WebContentsView)
+    const dbSession = db.getSession(sessionId);
+    if (dbSession && dbSession.session_type === 'capture') {
+      console.log(`[SessionManager] Activating capture session (no view): ${sessionId}`);
+      // Capture sessions don't have views, just update database
+      db.updateSessionActivity(sessionId);
+      return true;
+    }
+
+    // Provider session - has WebContentsView
     const view = this.views.get(sessionId);
 
     if (!view) {
-      console.error(`[SessionManager] Session ${sessionId} not found`);
+      console.error(`[SessionManager] Provider session ${sessionId} not found in views map`);
       return false;
     }
 
@@ -172,7 +235,7 @@ export class SessionManager {
     // Update last_active in database
     db.updateSessionActivity(sessionId);
 
-    console.log(`[SessionManager] Activated session: ${sessionId}`);
+    console.log(`[SessionManager] Activated provider session: ${sessionId}`);
 
     return true;
   }
@@ -181,14 +244,36 @@ export class SessionManager {
    * Delete a session and its WebContentsView
    */
   async deleteSession(sessionId: string): Promise<boolean> {
+    console.log(`[SessionManager] Deleting session: ${sessionId}`);
+
+    // Check if this is a capture session (no WebContentsView)
+    const dbSession = db.getSession(sessionId);
+    if (dbSession && dbSession.session_type === 'capture') {
+      console.log(`[SessionManager] Deleting capture session (no view): ${sessionId}`);
+      // Capture sessions don't have views, just delete from database
+      db.deleteSession(sessionId);
+      console.log(`[SessionManager] Capture session deleted: ${sessionId}`);
+
+      // Broadcast session:deleted event to all windows for auto-refresh
+      const allWindows = BrowserWindow.getAllWindows();
+      for (const window of allWindows) {
+        window.webContents.send('session:deleted', {
+          sessionId: sessionId
+        });
+      }
+
+      return true;
+    }
+
+    // Provider session - has WebContentsView
     const view = this.views.get(sessionId);
 
     if (!view) {
-      console.error(`[SessionManager] Session ${sessionId} not found`);
+      console.error(`[SessionManager] Provider session ${sessionId} not found in views map`);
+      // Still try to delete from database in case of orphaned record
+      db.deleteSession(sessionId);
       return false;
     }
-
-    console.log(`[SessionManager] Deleting session: ${sessionId}`);
 
     // Disable interceptor
     const interceptor = this.interceptors.get(sessionId);
@@ -218,7 +303,15 @@ export class SessionManager {
     // Delete from database (CASCADE will delete associated captures)
     db.deleteSession(sessionId);
 
-    console.log(`[SessionManager] Session deleted: ${sessionId}`);
+    console.log(`[SessionManager] Provider session deleted: ${sessionId}`);
+
+    // Broadcast session:deleted event to all windows for auto-refresh
+    const allWindows = BrowserWindow.getAllWindows();
+    for (const window of allWindows) {
+      window.webContents.send('session:deleted', {
+        sessionId: sessionId
+      });
+    }
 
     return true;
   }
@@ -255,6 +348,12 @@ export class SessionManager {
     for (const session of sessions) {
       if (!session.is_active) {
         console.log(`[SessionManager] Skipping inactive session: ${session.id}`);
+        continue;
+      }
+
+      // Skip capture sessions - they don't have WebContentsViews
+      if (session.session_type === 'capture') {
+        console.log(`[SessionManager] Skipping capture session (no view needed): ${session.id}`);
         continue;
       }
 
@@ -304,6 +403,47 @@ export class SessionManager {
             console.log(`[SessionManager] ✓ Interceptor enabled successfully for restored session ${session.id}`);
           } catch (error) {
             console.error(`[SessionManager] ✗ Failed to enable interceptor for restored session ${session.id}:`, error);
+          }
+        });
+
+        // Listen for browser notifications to detect deep research completion
+        view.webContents.on('did-create-notification', (_event, notification) => {
+          const title = notification.title.toLowerCase();
+          const body = notification.body?.toLowerCase() || '';
+
+          console.log(`[SessionManager] Notification detected on restored session: "${notification.title}"`);
+
+          // Check if this is a deep research completion notification
+          const isDeepResearchComplete =
+            title.includes('research complete') ||
+            title.includes('research finished') ||
+            body.includes('research complete') ||
+            body.includes('research finished') ||
+            body.includes('researching your question') ||
+            (title.includes('claude') && (body.includes('complete') || body.includes('finished')));
+
+          if (isDeepResearchComplete) {
+            console.log(`[SessionManager] 🔬 Deep research completion detected! Auto-capturing page...`);
+
+            // Wait a moment for any final UI updates, then auto-capture
+            setTimeout(async () => {
+              try {
+                const success = await this.captureCurrentPage(session.id);
+                if (success) {
+                  console.log(`[SessionManager] ✓ Auto-capture successful for restored session ${session.id}`);
+
+                  // Notify the UI that a new capture was created
+                  const allWindows = BrowserWindow.getAllWindows();
+                  for (const window of allWindows) {
+                    window.webContents.send('capture:auto-created', { sessionId: session.id });
+                  }
+                } else {
+                  console.error(`[SessionManager] ✗ Auto-capture failed for restored session ${session.id}`);
+                }
+              } catch (error) {
+                console.error(`[SessionManager] Error during auto-capture:`, error);
+              }
+            }, 2000); // Wait 2 seconds for UI to fully update
           }
         });
 
