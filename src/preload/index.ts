@@ -18,10 +18,23 @@ const electronAPI = {
   sessions: {
     create: (config: { provider: 'claude' | 'openai' | 'gemini' | 'custom'; name: string; url?: string }) =>
       ipcRenderer.invoke('session:create', config),
+    createCaptureSession: (config: { captureId: string; name: string }) =>
+      ipcRenderer.invoke('session:createCaptureSession', config),
     activate: (sessionId: string) => ipcRenderer.invoke('session:activate', sessionId),
     delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
     list: (includeInactive?: boolean) => ipcRenderer.invoke('session:list', includeInactive),
     getActive: () => ipcRenderer.invoke('session:getActive'),
+    captureCurrentPage: (sessionId: string) => ipcRenderer.invoke('session:captureCurrentPage', sessionId),
+    onSessionCreated: (callback: (data: { sessionId: string; provider: string; name: string }) => void) => {
+      const listener = (_event: any, data: any) => callback(data)
+      ipcRenderer.on('session:created', listener)
+      return () => ipcRenderer.removeListener('session:created', listener)
+    },
+    onSessionDeleted: (callback: (data: { sessionId: string }) => void) => {
+      const listener = (_event: any, data: any) => callback(data)
+      ipcRenderer.on('session:deleted', listener)
+      return () => ipcRenderer.removeListener('session:deleted', listener)
+    },
   },
 
   // View management
@@ -40,10 +53,22 @@ const electronAPI = {
       ipcRenderer.invoke('data:searchCaptures', query, filters),
     updateTags: (captureId: string, tags: string[]) => ipcRenderer.invoke('data:updateTags', captureId, tags),
     updateNotes: (captureId: string, notes: string) => ipcRenderer.invoke('data:updateNotes', captureId, notes),
+    updateMessageType: (captureId: string, messageType: 'chat' | 'deep_research' | 'image' | 'code') =>
+      ipcRenderer.invoke('data:updateMessageType', captureId, messageType),
+    updateTopic: (captureId: string, topic: string | null) =>
+      ipcRenderer.invoke('data:updateTopic', captureId, topic),
+    updateMetadata: (captureId: string, metadata: Record<string, any> | null) =>
+      ipcRenderer.invoke('data:updateMetadata', captureId, metadata),
     setArchived: (captureId: string, isArchived: boolean) =>
       ipcRenderer.invoke('data:setArchived', captureId, isArchived),
     deleteCapture: (captureId: string) => ipcRenderer.invoke('data:deleteCapture', captureId),
     getStats: () => ipcRenderer.invoke('data:getStats'),
+    getAllTags: () => ipcRenderer.invoke('data:getAllTags'),
+    onCapture: (callback: (data: { captureId: string; sessionId: string; provider: string; preview: string }) => void) => {
+      const listener = (_event: any, data: any) => callback(data)
+      ipcRenderer.on('response:captured', listener)
+      return () => ipcRenderer.removeListener('response:captured', listener)
+    },
   },
 
   // Export operations

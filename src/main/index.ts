@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { randomUUID } from 'crypto'
 import fs from 'fs'
 import { db } from './database/db.js'
 import { SessionManager } from './session/SessionManager.js'
@@ -111,15 +112,41 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', async () => {
-  // Clean up session manager
-  if (sessionManager) {
-    await sessionManager.destroy()
-  }
+app.on('before-quit', async (event) => {
+  // Prevent default to allow async cleanup
+  event.preventDefault()
 
-  // Close database connection
-  db.close()
-  console.log('[App] Application shutting down')
+  console.log('[App] Starting shutdown sequence...')
+
+  try {
+    // Set a timeout to force quit if cleanup takes too long
+    const forceQuitTimeout = setTimeout(() => {
+      console.log('[App] Force quitting after cleanup timeout')
+      app.exit(0)
+    }, 3000)
+
+    // Clean up session manager
+    if (sessionManager) {
+      console.log('[App] Destroying session manager...')
+      await sessionManager.destroy()
+      console.log('[App] Session manager destroyed')
+    }
+
+    // Close database connection
+    console.log('[App] Closing database...')
+    db.close()
+    console.log('[App] Database closed')
+
+    clearTimeout(forceQuitTimeout)
+    console.log('[App] Application shutdown complete')
+
+    // Actually quit now
+    app.exit(0)
+  } catch (error) {
+    console.error('[App] Error during shutdown:', error)
+    // Force quit even on error
+    app.exit(1)
+  }
 })
 
 // ==================== IPC HANDLERS ====================
@@ -133,6 +160,48 @@ function registerIpcHandlers() {
       return { success: true, session }
     } catch (error) {
       console.error('[IPC] session:create error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Session: Create capture session
+  ipcMain.handle('session:createCaptureSession', async (_event, config: { captureId: string; name: string }) => {
+    try {
+      if (!sessionManager) throw new Error('SessionManager not initialized')
+
+      const sessionId = randomUUID()
+      console.log(`[IPC] Creating capture session: ${sessionId} for capture ${config.captureId}`)
+
+      // Create database entry for capture-type session
+      const dbSession = db.createSession({
+        id: sessionId,
+        session_type: 'capture',
+        provider: 'capture', // Use 'capture' as a special provider type for capture sessions
+        name: config.name,
+        partition: undefined,
+        capture_id: config.captureId,
+        url: undefined,
+        metadata: JSON.stringify({
+          createdBy: 'user',
+          captureId: config.captureId
+        })
+      })
+
+      console.log(`[IPC] Capture session created successfully: ${sessionId}`)
+
+      // Broadcast session:created event to all windows for auto-refresh
+      const allWindows = BrowserWindow.getAllWindows();
+      for (const window of allWindows) {
+        window.webContents.send('session:created', {
+          sessionId: dbSession.id,
+          provider: 'capture',
+          name: dbSession.name
+        });
+      }
+
+      return { success: true, session: dbSession }
+    } catch (error) {
+      console.error('[IPC] session:createCaptureSession error:', error)
       return { success: false, error: (error as Error).message }
     }
   })
@@ -153,7 +222,7 @@ function registerIpcHandlers() {
   ipcMain.handle('session:delete', async (_event, sessionId: string) => {
     try {
       if (!sessionManager) throw new Error('SessionManager not initialized')
-      const success = sessionManager.deleteSession(sessionId)
+      const success = await sessionManager.deleteSession(sessionId)
       return { success }
     } catch (error) {
       console.error('[IPC] session:delete error:', error)
@@ -181,6 +250,36 @@ function registerIpcHandlers() {
       return { success: true, activeSessionId }
     } catch (error) {
       console.error('[IPC] session:getActive error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Session: Capture current page
+  ipcMain.handle('session:captureCurrentPage', async (_event, sessionId: string) => {
+    try {
+      if (!sessionManager) throw new Error('SessionManager not initialized')
+
+      const { PageScraper } = await import('./scraper/PageScraper.js')
+
+      // Get the view and session info
+      const view = sessionManager.getView(sessionId)
+      if (!view) {
+        throw new Error(`View not found for session ${sessionId}`)
+      }
+
+      // Get session from database to know the provider
+      const session = db.getSession(sessionId)
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found in database`)
+      }
+
+      console.log(`[IPC] Capturing current page for session ${sessionId} (${session.provider})`)
+
+      const success = await PageScraper.scrapeCurrentPage(view, sessionId, session.provider)
+
+      return { success }
+    } catch (error) {
+      console.error('[IPC] session:captureCurrentPage error:', error)
       return { success: false, error: (error as Error).message }
     }
   })
@@ -297,6 +396,39 @@ function registerIpcHandlers() {
     }
   })
 
+  // Data: Update capture message type
+  ipcMain.handle('data:updateMessageType', async (_event, captureId: string, messageType: 'chat' | 'deep_research' | 'image' | 'code') => {
+    try {
+      db.updateCaptureMessageType(captureId, messageType)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] data:updateMessageType error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Data: Update capture topic
+  ipcMain.handle('data:updateTopic', async (_event, captureId: string, topic: string | null) => {
+    try {
+      db.updateCaptureTopic(captureId, topic)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] data:updateTopic error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Data: Update capture metadata
+  ipcMain.handle('data:updateMetadata', async (_event, captureId: string, metadata: Record<string, any> | null) => {
+    try {
+      db.updateCaptureMetadata(captureId, metadata)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] data:updateMetadata error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // Data: Archive/unarchive capture
   ipcMain.handle('data:setArchived', async (_event, captureId: string, isArchived: boolean) => {
     try {
@@ -326,6 +458,17 @@ function registerIpcHandlers() {
       return { success: true, stats }
     } catch (error) {
       console.error('[IPC] data:getStats error:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Data: Get all unique tags
+  ipcMain.handle('data:getAllTags', async () => {
+    try {
+      const tags = db.getAllTags()
+      return { success: true, tags }
+    } catch (error) {
+      console.error('[IPC] data:getAllTags error:', error)
       return { success: false, error: (error as Error).message }
     }
   })
@@ -458,7 +601,10 @@ function registerIpcHandlers() {
         'token_count',
         'tags',
         'notes',
-        'is_archived'
+        'is_archived',
+        'message_type',
+        'topic',
+        'metadata_json'
       ]
       writeStream.write(headers.join(',') + '\n')
 
@@ -477,7 +623,10 @@ function registerIpcHandlers() {
           escapeCsvField(capture.token_count),
           escapeCsvField(capture.tags),
           escapeCsvField(capture.notes),
-          escapeCsvField(capture.is_archived)
+          escapeCsvField(capture.is_archived),
+          escapeCsvField(capture.message_type),
+          escapeCsvField(capture.topic),
+          escapeCsvField(capture.metadata_json)
         ]
         writeStream.write(row.join(',') + '\n')
 
