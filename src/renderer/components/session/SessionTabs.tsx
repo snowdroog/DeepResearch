@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'
 import { ProviderType } from '../../types/session'
 import { ProviderSelectionDialog } from './ProviderSelectionDialog'
 import { CloseSessionDialog } from './CloseSessionDialog'
 import { useWebContentsViewBounds } from '../../hooks/useWebContentsViewBounds'
+import { useCapturesStore } from '../../stores/capturesStore'
+import CaptureTabContent from '../capture/CaptureTabContent'
 
 const PROVIDER_COLORS: Record<ProviderType, string> = {
   claude: 'bg-blue-500',
@@ -18,7 +20,7 @@ const PROVIDER_COLORS: Record<ProviderType, string> = {
 interface SessionTabProps {
   id: string
   name: string
-  provider: ProviderType
+  provider?: ProviderType
   isActive: boolean
   onClose: () => void
   onRename: (newName: string) => void
@@ -76,7 +78,7 @@ function SessionTab({
       onClick={onSelect}
     >
       {/* Provider Indicator */}
-      <div className={`h-2 w-2 rounded-full ${PROVIDER_COLORS[provider]}`}></div>
+      {provider && <div className={`h-2 w-2 rounded-full ${PROVIDER_COLORS[provider]}`}></div>}
 
       {/* Session Name */}
       {isEditing ? (
@@ -118,15 +120,20 @@ interface SessionTabContentProps {
   session: {
     id: string
     name: string
-    provider: ProviderType
-    url: string
+    type: 'provider' | 'capture'
+    provider?: ProviderType
+    url?: string
+    captureId?: string
   }
   isActive: boolean
 }
 
 function SessionTabContent({ session, isActive }: SessionTabContentProps) {
-  // Use the custom hook to manage WebContentsView bounds
-  const containerRef = useWebContentsViewBounds(isActive ? session.id : null, isActive)
+  // Use the custom hook to manage WebContentsView bounds only for provider sessions
+  const containerRef = useWebContentsViewBounds(
+    isActive && session.type === 'provider' ? session.id : null,
+    isActive && session.type === 'provider'
+  )
 
   return (
     <Tabs.Content
@@ -134,15 +141,29 @@ function SessionTabContent({ session, isActive }: SessionTabContentProps) {
       value={session.id}
       className="flex-1 overflow-hidden"
     >
-      {/* Container for WebContentsView */}
-      <div
-        ref={containerRef}
-        className="h-full w-full bg-background"
-        style={{ position: 'relative' }}
-      >
-        {/* WebContentsView will be positioned here by Electron */}
-        {/* The view is rendered natively by Electron, not in React */}
-      </div>
+      {session.type === 'provider' ? (
+        // Container for WebContentsView (provider sessions)
+        <div
+          ref={containerRef}
+          className="h-full w-full bg-background"
+          style={{ position: 'relative' }}
+        >
+          {/* WebContentsView will be positioned here by Electron */}
+          {/* The view is rendered natively by Electron, not in React */}
+        </div>
+      ) : session.captureId ? (
+        // React content for capture sessions
+        <CaptureTabContent captureId={session.captureId} />
+      ) : (
+        // Fallback for capture sessions without captureId
+        <div className="h-full w-full overflow-auto bg-background p-4">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-muted-foreground">
+              Error: Capture session missing capture ID
+            </p>
+          </div>
+        </div>
+      )}
     </Tabs.Content>
   )
 }
@@ -150,10 +171,78 @@ function SessionTabContent({ session, isActive }: SessionTabContentProps) {
 export function SessionTabs() {
   const { sessions, activeSessionId, addSession, removeSession, setActiveSession, renameSession } =
     useSessionStore()
+  const { fetchCaptures } = useCapturesStore()
 
   const [showProviderDialog, setShowProviderDialog] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [sessionToClose, setSessionToClose] = useState<{ id: string; name: string } | null>(null)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+  const tabListRef = useRef<HTMLDivElement>(null)
+
+  // Check scroll position for navigation buttons
+  useEffect(() => {
+    const checkScroll = () => {
+      if (!tabListRef.current) return
+
+      const { scrollLeft, scrollWidth, clientWidth } = tabListRef.current
+      setCanScrollLeft(scrollLeft > 0)
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1)
+    }
+
+    const tabList = tabListRef.current
+    if (tabList) {
+      checkScroll()
+      tabList.addEventListener('scroll', checkScroll)
+      window.addEventListener('resize', checkScroll)
+
+      return () => {
+        tabList.removeEventListener('scroll', checkScroll)
+        window.removeEventListener('resize', checkScroll)
+      }
+    }
+  }, [sessions])
+
+  // Scroll navigation functions
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (!tabListRef.current) return
+    const scrollAmount = 200
+    tabListRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    })
+  }
+
+  // Hide/show active WebContentsView when any dialog opens/closes
+  // This prevents dialogs from appearing behind the native Electron view
+  useEffect(() => {
+    if (!activeSessionId) return
+
+    const activeSession = sessions.find(s => s.id === activeSessionId)
+    if (!activeSession) return
+
+    const anyDialogOpen = showProviderDialog || showCloseDialog
+
+    // If active session is a capture session, hide all provider views
+    if (activeSession.type === 'capture') {
+      sessions.filter(s => s.type === 'provider').forEach(s => {
+        window.electronAPI.views.setVisible(s.id, false)
+      })
+      return
+    }
+
+    // For provider sessions, manage visibility based on dialog state
+    if (activeSession.type === 'provider') {
+      if (anyDialogOpen) {
+        // Hide the view when a dialog opens
+        window.electronAPI.views.setVisible(activeSessionId, false)
+      } else {
+        // Show the view when all dialogs are closed
+        window.electronAPI.views.setVisible(activeSessionId, true)
+      }
+    }
+  }, [activeSessionId, sessions, showProviderDialog, showCloseDialog])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -212,6 +301,26 @@ export function SessionTabs() {
     }
   }
 
+  const handleCaptureCurrentPage = async () => {
+    if (!activeSessionId) return
+
+    setIsCapturing(true)
+    try {
+      const result = await window.electronAPI.sessions.captureCurrentPage(activeSessionId)
+      if (result.success) {
+        console.log('[SessionTabs] Page captured successfully')
+        // Refresh captures list
+        await fetchCaptures({ isArchived: false })
+      } else {
+        console.error('[SessionTabs] Failed to capture page:', result.error)
+      }
+    } catch (error) {
+      console.error('[SessionTabs] Error capturing page:', error)
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
   return (
     <>
       <Tabs.Root
@@ -220,36 +329,82 @@ export function SessionTabs() {
         className="flex h-full flex-col"
       >
         {/* Tab List */}
-        <Tabs.List className="flex items-center border-b bg-muted/30">
-          {sessions.map((session) => (
-            <SessionTab
-              key={session.id}
-              id={session.id}
-              name={session.name}
-              provider={session.provider}
-              isActive={session.id === activeSessionId}
-              onClose={() => handleRequestClose(session.id, session.name)}
-              onRename={(newName) => renameSession(session.id, newName)}
-              onSelect={() => setActiveSession(session.id)}
-            />
-          ))}
+        <div className="flex items-center border-b bg-muted/30">
+          {/* Left scroll button */}
+          {canScrollLeft && (
+            <button
+              onClick={() => scrollTabs('left')}
+              className="flex-shrink-0 border-r border-border px-2 py-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              title="Scroll left"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
 
-        {/* Add Session Button */}
-        <button
-          onClick={handleAddSession}
-          className="flex items-center gap-1 border-r border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          title="Add new session (Cmd/Ctrl+T)"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+          <Tabs.List
+            ref={tabListRef}
+            className="flex items-center overflow-x-auto overflow-y-hidden flex-1 scrollbar-hide"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {sessions.map((session) => (
+              <SessionTab
+                key={session.id}
+                id={session.id}
+                name={session.name}
+                provider={session.provider}
+                isActive={session.id === activeSessionId}
+                onClose={() => handleRequestClose(session.id, session.name)}
+                onRename={(newName) => renameSession(session.id, newName)}
+                onSelect={() => setActiveSession(session.id)}
+              />
+            ))}
+          </Tabs.List>
 
-        {/* Keyboard Shortcuts Hint */}
-        <div className="ml-auto px-4 text-xs text-muted-foreground">
-          <span className="hidden lg:inline">
-            Cmd/Ctrl+T: New • Cmd/Ctrl+W: Close • Cmd/Ctrl+1-9: Switch
-          </span>
+          {/* Right scroll button */}
+          {canScrollRight && (
+            <button
+              onClick={() => scrollTabs('right')}
+              className="flex-shrink-0 border-l border-border px-2 py-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              title="Scroll right"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Add Session Button */}
+          <button
+            onClick={handleAddSession}
+            className="flex-shrink-0 flex items-center gap-1 border-l border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            title="Add new session (Cmd/Ctrl+T)"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
-      </Tabs.List>
+
+        {/* Action Bar - Capture and Keyboard Shortcuts */}
+        <div className="flex items-center justify-between border-b bg-muted/20 px-4 py-1.5">
+          {/* Capture Current Page Button */}
+          <div>
+            {activeSessionId && sessions.find(s => s.id === activeSessionId)?.type === 'provider' && (
+              <button
+                onClick={handleCaptureCurrentPage}
+                disabled={isCapturing}
+                className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                title="Capture current conversation"
+              >
+                <Download className={`h-3.5 w-3.5 ${isCapturing ? 'animate-bounce' : ''}`} />
+                {isCapturing ? 'Capturing...' : 'Capture Page'}
+              </button>
+            )}
+          </div>
+
+          {/* Keyboard Shortcuts Hint */}
+          <div className="text-xs text-muted-foreground">
+            <span className="hidden lg:inline">
+              Cmd/Ctrl+T: New • Cmd/Ctrl+W: Close • Cmd/Ctrl+1-9: Switch
+            </span>
+          </div>
+        </div>
 
       {/* Tab Content */}
       {sessions.length === 0 ? (

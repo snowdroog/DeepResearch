@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { format } from 'date-fns'
+import ReactMarkdown from 'react-markdown'
 import {
   Dialog,
   DialogContent,
@@ -9,7 +10,6 @@ import {
 } from '@/renderer/components/ui/dialog'
 import { ScrollArea } from '@/renderer/components/ui/scroll-area'
 import { Button } from '@/renderer/components/ui/button'
-import { Input } from '@/renderer/components/ui/input'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Badge } from '@/renderer/components/ui/badge'
 import {
@@ -17,13 +17,20 @@ import {
   ArchiveRestore,
   Copy,
   Trash2,
-  X,
-  Plus,
   Check,
+  Microscope,
 } from 'lucide-react'
 import { DeleteCaptureDialog } from './DeleteCaptureDialog'
 import { toast } from '@/renderer/lib/toast'
 import type { CaptureData } from '@/renderer/components/organisms/ResearchDataTable'
+import TagBadge from '../ui/tag-badge'
+import TagAutocomplete from '../ui/tag-autocomplete'
+import {
+  parseAndEnhanceTags,
+  enhancedTagsToStrings,
+  formatTagsForAutocomplete,
+  type EnhancedTag,
+} from '../../utils/tagUtils'
 
 interface CaptureDetailDialogProps {
   open: boolean
@@ -39,27 +46,41 @@ export function CaptureDetailDialog({
   onUpdate,
 }: CaptureDetailDialogProps) {
   const [notes, setNotes] = React.useState('')
-  const [tags, setTags] = React.useState<string[]>([])
+  const [enhancedTags, setEnhancedTags] = React.useState<EnhancedTag[]>([])
+  const [availableTags, setAvailableTags] = React.useState<EnhancedTag[]>([])
   const [newTag, setNewTag] = React.useState('')
   const [isEditingNotes, setIsEditingNotes] = React.useState(false)
   const [isSavingNotes, setIsSavingNotes] = React.useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false)
 
-  // Parse tags from JSON string
-  const parseTags = (tagsStr?: string): string[] => {
-    if (!tagsStr) return []
-    try {
-      return JSON.parse(tagsStr)
-    } catch {
-      return []
+  // Fetch available tags on mount
+  React.useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const result = await window.electronAPI.data.getAllTags()
+        if (result.success && result.tags) {
+          const formatted = formatTagsForAutocomplete(result.tags)
+          setAvailableTags(formatted)
+        }
+      } catch (error) {
+        console.error('Failed to fetch tags:', error)
+      }
     }
-  }
+    fetchTags()
+  }, [])
 
   // Initialize state when capture changes
   React.useEffect(() => {
     if (capture) {
       setNotes(capture.notes || '')
-      setTags(parseTags(capture.tags))
+      // Parse and enhance tags with context from capture
+      const parsed = parseAndEnhanceTags(
+        capture.tags || null,
+        capture.provider,
+        capture.message_type,
+        capture.topic
+      )
+      setEnhancedTags(parsed)
       setIsEditingNotes(false)
     }
   }, [capture])
@@ -77,60 +98,71 @@ export function CaptureDetailDialog({
   }
 
   // Handle tag addition
-  const handleAddTag = async () => {
-    const trimmedTag = newTag.trim()
+  const handleAddTag = async (tagText: string) => {
+    const trimmedTag = tagText.trim()
     if (!trimmedTag) return
 
-    if (tags.includes(trimmedTag)) {
+    // Check if tag already exists
+    if (enhancedTags.some(t => t.text.toLowerCase() === trimmedTag.toLowerCase())) {
       toast.warning('Tag exists', 'This tag is already added')
       setNewTag('')
       return
     }
 
-    const updatedTags = [...tags, trimmedTag]
-    setTags(updatedTags)
+    // Create new enhanced tag with context
+    const newEnhancedTag: EnhancedTag = {
+      text: trimmedTag,
+      type: 'custom' // Will be properly typed by backend on next load
+    }
+
+    const updatedEnhancedTags = [...enhancedTags, newEnhancedTag]
+    const updatedTagStrings = enhancedTagsToStrings(updatedEnhancedTags)
+
+    setEnhancedTags(updatedEnhancedTags)
     setNewTag('')
 
     try {
       const result = await window.electronAPI.data.updateTags(
         capture.id,
-        updatedTags
+        updatedTagStrings
       )
       if (result.success) {
         toast.success('Tag added', 'Tag has been added successfully')
         onUpdate?.()
       } else {
         // Revert on error
-        setTags(tags)
+        setEnhancedTags(enhancedTags)
         toast.error('Update failed', result.error || 'Failed to add tag')
       }
     } catch (error) {
-      setTags(tags)
+      setEnhancedTags(enhancedTags)
       toast.error('Update failed', 'An unexpected error occurred')
     }
   }
 
   // Handle tag removal
   const handleRemoveTag = async (tagToRemove: string) => {
-    const updatedTags = tags.filter((t) => t !== tagToRemove)
-    const previousTags = [...tags]
-    setTags(updatedTags)
+    const updatedEnhancedTags = enhancedTags.filter((t) => t.text !== tagToRemove)
+    const previousTags = [...enhancedTags]
+    const updatedTagStrings = enhancedTagsToStrings(updatedEnhancedTags)
+
+    setEnhancedTags(updatedEnhancedTags)
 
     try {
       const result = await window.electronAPI.data.updateTags(
         capture.id,
-        updatedTags
+        updatedTagStrings
       )
       if (result.success) {
         toast.success('Tag removed', 'Tag has been removed successfully')
         onUpdate?.()
       } else {
         // Revert on error
-        setTags(previousTags)
+        setEnhancedTags(previousTags)
         toast.error('Update failed', result.error || 'Failed to remove tag')
       }
     } catch (error) {
-      setTags(previousTags)
+      setEnhancedTags(previousTags)
       toast.error('Update failed', 'An unexpected error occurred')
     }
   }
@@ -192,9 +224,17 @@ export function CaptureDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] p-0">
           <DialogHeader className="p-6 pb-4">
-            <DialogTitle>Capture Details</DialogTitle>
+            <div className="flex items-center gap-2">
+              <DialogTitle>Capture Details</DialogTitle>
+              {capture.message_type === 'deep_research' && (
+                <Badge variant="secondary" className="gap-1">
+                  <Microscope className="h-3 w-3" />
+                  Deep Research
+                </Badge>
+              )}
+            </div>
             <DialogDescription>
-              {format(new Date(capture.timestamp), 'MMM dd, yyyy HH:mm:ss')} •{' '}
+              {format(new Date(capture.timestamp * 1000), 'MMM dd, yyyy HH:mm:ss')} •{' '}
               {capture.provider} {capture.model ? `• ${capture.model}` : ''}
             </DialogDescription>
           </DialogHeader>
@@ -234,53 +274,131 @@ export function CaptureDetailDialog({
                     Copy
                   </Button>
                 </div>
-                <div className="rounded-md border bg-muted/50 p-4">
-                  <p className="text-sm whitespace-pre-wrap">
+                <div className="rounded-md border bg-muted/50 p-6">
+                  <ReactMarkdown
+                    className="prose prose-sm dark:prose-invert max-w-none"
+                    components={{
+                      h1: ({ node, ...props }) => (
+                        <h1 className="text-2xl font-bold mt-6 mb-4 first:mt-0" {...props} />
+                      ),
+                      h2: ({ node, ...props }) => (
+                        <h2 className="text-xl font-bold mt-5 mb-3 first:mt-0" {...props} />
+                      ),
+                      h3: ({ node, ...props }) => (
+                        <h3 className="text-lg font-semibold mt-4 mb-2 first:mt-0" {...props} />
+                      ),
+                      p: ({ node, ...props }) => (
+                        <p className="mb-4 leading-relaxed" {...props} />
+                      ),
+                      ul: ({ node, ...props }) => (
+                        <ul className="list-disc pl-6 mb-4 space-y-1" {...props} />
+                      ),
+                      ol: ({ node, ...props }) => (
+                        <ol className="list-decimal pl-6 mb-4 space-y-1" {...props} />
+                      ),
+                      li: ({ node, ...props }) => (
+                        <li className="leading-relaxed" {...props} />
+                      ),
+                      a: ({ node, ...props }) => (
+                        <a
+                          className="text-primary hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          {...props}
+                        />
+                      ),
+                      code: ({ node, inline, ...props }: any) =>
+                        inline ? (
+                          <code
+                            className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
+                            {...props}
+                          />
+                        ) : (
+                          <code
+                            className="block bg-muted p-4 rounded-md overflow-x-auto text-sm font-mono mb-4"
+                            {...props}
+                          />
+                        ),
+                      blockquote: ({ node, ...props }) => (
+                        <blockquote
+                          className="border-l-4 border-primary/30 pl-4 italic my-4 text-muted-foreground"
+                          {...props}
+                        />
+                      ),
+                    }}
+                  >
                     {capture.response}
-                  </p>
+                  </ReactMarkdown>
                 </div>
               </div>
+
+              {/* Sources Section (Deep Research) */}
+              {capture.metadata_json && (() => {
+                try {
+                  const metadata = JSON.parse(capture.metadata_json)
+                  if (metadata.sources && metadata.sources.length > 0) {
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold">
+                          Sources ({metadata.sources.length})
+                        </h3>
+                        <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+                          {metadata.sources.map((source: any, index: number) => (
+                            <div
+                              key={index}
+                              className="pb-3 border-b last:border-b-0 last:pb-0"
+                            >
+                              <a
+                                href={source.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-primary hover:underline"
+                              >
+                                {source.title}
+                              </a>
+                              <p className="text-xs text-muted-foreground mt-1 break-all">
+                                {source.url}
+                              </p>
+                              {source.snippet && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {source.snippet}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }
+                } catch (error) {
+                  console.error('Failed to parse metadata_json:', error)
+                }
+                return null
+              })()}
 
               {/* Tags Section */}
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Tags</h3>
                 <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      {tag}
-                      <button
-                        onClick={() => handleRemoveTag(tag)}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
+                  {enhancedTags.map((tag) => (
+                    <TagBadge
+                      key={tag.text}
+                      tag={tag.text}
+                      type={tag.type}
+                      onRemove={() => handleRemoveTag(tag.text)}
+                    />
                   ))}
-                  {tags.length === 0 && (
+                  {enhancedTags.length === 0 && (
                     <p className="text-sm text-muted-foreground">No tags</p>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add a tag..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleAddTag()
-                      }
-                    }}
-                  />
-                  <Button onClick={handleAddTag} size="sm">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                </div>
+                <TagAutocomplete
+                  value={newTag}
+                  onChange={setNewTag}
+                  onAddTag={handleAddTag}
+                  suggestions={availableTags}
+                  placeholder="Add a tag..."
+                />
               </div>
 
               {/* Notes Section */}

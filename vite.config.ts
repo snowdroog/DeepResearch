@@ -76,6 +76,38 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist/renderer'
+    outDir: 'dist/renderer',
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'syntax-highlighter': ['react-syntax-highlighter']
+        }
+      },
+      external: (id) => {
+        // Externalize refractor to avoid bundling issues
+        return id.includes('refractor')
+      }
+    }
+  },
+  optimizeDeps: {
+    include: [
+      'react-syntax-highlighter/dist/esm/light',
+      'react-syntax-highlighter/dist/esm/languages/hljs/javascript',
+      'react-syntax-highlighter/dist/esm/languages/hljs/typescript',
+      'react-syntax-highlighter/dist/esm/languages/hljs/python',
+      'react-syntax-highlighter/dist/esm/languages/hljs/bash'
+    ],
+    exclude: [
+      'react-syntax-highlighter/dist/esm/languages/prism',
+      'refractor'
+    ],
+    esbuildOptions: {
+      // Mark refractor as external during optimization
+      external: ['refractor']
+    }
   }
 })

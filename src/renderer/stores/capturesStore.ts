@@ -37,6 +37,7 @@ interface CapturesStore {
   deleteCapture: (captureId: string) => Promise<void>
   setSelectedIds: (ids: string[]) => void
   clearSelection: () => void
+  setupAutoRefresh: () => (() => void)
 }
 
 export const useCapturesStore = create<CapturesStore>((set, get) => ({
@@ -142,4 +143,16 @@ export const useCapturesStore = create<CapturesStore>((set, get) => ({
   setSelectedIds: (ids: string[]) => set({ selectedIds: ids }),
 
   clearSelection: () => set({ selectedIds: [] }),
+
+  setupAutoRefresh: () => {
+    // Set up listener for new captures
+    const unsubscribe = window.electronAPI.data.onCapture((data) => {
+      console.log('[CapturesStore] New capture detected:', data.captureId);
+
+      // Refresh the captures list to include the new capture
+      get().fetchCaptures();
+    });
+
+    return unsubscribe;
+  },
 }))

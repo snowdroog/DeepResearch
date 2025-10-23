@@ -38,6 +38,9 @@ export interface CaptureData {
   tags?: string
   notes?: string
   is_archived: number
+  message_type?: string
+  topic?: string
+  metadata_json?: string
 }
 
 interface ResearchDataTableProps {
@@ -112,11 +115,14 @@ export function ResearchDataTable({
           </Button>
         )
       },
-      cell: ({ row }) => (
-        <div className="whitespace-nowrap">
-          {format(new Date(row.getValue('timestamp')), 'MMM dd, yyyy HH:mm:ss')}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const timestamp = row.getValue('timestamp') as number
+        return (
+          <div className="whitespace-nowrap">
+            {format(new Date(timestamp * 1000), 'MMM dd, yyyy HH:mm:ss')}
+          </div>
+        )
+      },
       sortingFn: 'datetime',
     },
     {

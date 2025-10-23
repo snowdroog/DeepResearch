@@ -28,9 +28,10 @@ export function SessionListPanel() {
   const [showProviderDialog, setShowProviderDialog] = useState(false)
 
   // Group sessions by provider (should only be one per provider)
+  // Only count provider sessions, not capture sessions
   const sessionsByProvider = new Map<ProviderType, string>()
-  sessions.forEach(session => {
-    sessionsByProvider.set(session.provider, session.id)
+  sessions.filter(s => s.type === 'provider' && s.provider).forEach(session => {
+    sessionsByProvider.set(session.provider!, session.id)
   })
 
   // Find which providers are available but not connected

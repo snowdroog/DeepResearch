@@ -14,7 +14,7 @@ import { useSessionStore } from '../stores/sessionStore'
 export function MainLayout() {
   const { captures, fetchCaptures } = useCapturesStore()
   const { dialogs, setDialogOpen, panels, setPanelCollapsed } = useUIStore()
-  const { activeSessionId, loadSessions } = useSessionStore()
+  const { activeSessionId, loadSessions, setupAutoRefresh } = useSessionStore()
 
   const isDataPanelCollapsed = panels.isDataPanelCollapsed
   const showExport = dialogs.export
@@ -24,6 +24,12 @@ export function MainLayout() {
   useEffect(() => {
     loadSessions()
   }, [loadSessions])
+
+  // Set up auto-refresh for sessions
+  useEffect(() => {
+    const unsubscribe = setupAutoRefresh()
+    return () => unsubscribe()
+  }, [setupAutoRefresh])
 
   // Load captures when export dialog is opened
   useEffect(() => {

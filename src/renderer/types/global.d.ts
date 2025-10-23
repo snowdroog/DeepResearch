@@ -25,10 +25,17 @@ declare global {
           name: string
           url?: string
         }) => Promise<any>
+        createCaptureSession: (config: {
+          captureId: string
+          name: string
+        }) => Promise<any>
         activate: (sessionId: string) => Promise<any>
         delete: (sessionId: string) => Promise<any>
         list: (includeInactive?: boolean) => Promise<any>
         getActive: () => Promise<any>
+        captureCurrentPage: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+        onSessionCreated: (callback: (data: { sessionId: string; provider: string; name: string }) => void) => () => void
+        onSessionDeleted: (callback: (data: { sessionId: string }) => void) => () => void
       }
 
       // View management
@@ -63,6 +70,18 @@ declare global {
           captureId: string,
           notes: string
         ) => Promise<{ success: boolean; error?: string }>
+        updateMessageType: (
+          captureId: string,
+          messageType: 'chat' | 'deep_research' | 'image' | 'code'
+        ) => Promise<{ success: boolean; error?: string }>
+        updateTopic: (
+          captureId: string,
+          topic: string | null
+        ) => Promise<{ success: boolean; error?: string }>
+        updateMetadata: (
+          captureId: string,
+          metadata: Record<string, any> | null
+        ) => Promise<{ success: boolean; error?: string }>
         setArchived: (
           captureId: string,
           isArchived: boolean
@@ -81,6 +100,8 @@ declare global {
           }
           error?: string
         }>
+        getAllTags: () => Promise<{ success: boolean; tags?: string[]; error?: string }>
+        onCapture: (callback: (data: { captureId: string; sessionId: string; provider: string; preview: string }) => void) => () => void
       }
 
       // Export operations
