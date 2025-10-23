@@ -80,7 +80,7 @@
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
-    "electron": "^33.4.11",
+    "electron": "^38.4.0",
     "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -93,7 +93,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
-    "vite-plugin-electron": "^0.28.0",
+    "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "^1.2.0",
     "wait-on": "^7.2.0"
